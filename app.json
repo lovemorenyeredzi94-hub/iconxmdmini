@@ -1,0 +1,18 @@
+{
+  "name": "♥️ICON-X MD PAIR♥️",
+  "description": "SESSION ID GENERATOR FOR WHATSAPP BOTS",
+  "logo": "https://files.catbox.moe/ed0968.jpg",
+  "repository": "/",
+  "keywords": ["@ICON-X MD"],
+  "success_url": "/", 
+  "buildpacks": [
+    { "url": "/" }
+  ],
+  "env": {      
+    "MESSAGE": {
+      "description": "Msg Attached With Session ID",
+      "value": "🔰 BY || ICON-X MD OFFICIAL 🔰",
+      "required": false 
+    }
+  }
+}
