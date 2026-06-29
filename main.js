@@ -613,49 +613,30 @@ async function startBot(number) {
         if (!msg.message) return;
 
         const from = msg.key.remoteJid;
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            "";
+const conn = makeWASocket({
+    auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+    },
+    printQRInTerminal: true, // ✅ FIX: allow QR instead of pairing freeze
+    logger: pino({ level: "silent" }),
 
-        if (text === ".ping") {
-            await sock.sendMessage(from, { text: "Pong ✅ Bot is working" });
-        }
-    });
+    version: [2, 3000, 1033105955],
 
-    return sock;
-}
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 0,
+    keepAliveIntervalMs: 10000,
 
-// START BOT EXAMPLE
-startBot("263XXXXXXXXX");
+    emitOwnEvents: true,
+    fireInitQueries: true,
+    generateHighQualityLinkPreview: true,
+    syncFullHistory: false, // ✅ FIX: prevents slow/stuck loading
+    markOnlineOnConnect: true,
 
-        if (!numbers.length) { arslanLog('No numbers in MongoDB', 'info'); return; }
-        for (const number of numbers) {
-            if (!activeSockets.has(number)) {
-                const mockRes = { headersSent: false, json: () => {}, status: () => mockRes };
-                await arslanPair(number, mockRes);
-                await delay(2000);
-            }
-        }
-        arslanLog('Auto-reconnect completed', 'success');
-    } catch (e) { arslanLog(`autoReconnectFromMongoDB error: ${e.message}`, 'error'); }
-}
+    browser: Browsers.macOS("Safari"),
 
-setTimeout(() => { autoReconnectFromMongoDB(); }, 3000);
-
-
-
-process.on('exit', () => {
-    activeSockets.forEach((socket, number) => {
-        try { socket.ws.close(); } catch (_) {}
-        activeSockets.delete(number); socketCreationTime.delete(number);
-    });
-    const sessionDir = path.join(__dirname, 'session');
-    if (fs.existsSync(sessionDir)) fs.emptyDirSync(sessionDir);
+    getMessage: async (key) => {
+        const msg = await arslanStore.loadMessage(key.remoteJid, key.id);
+        return msg?.message || { conversation: "ICON-X MD" };
+    }
 });
-
-process.on('uncaughtException', (err) => {
-    arslanLog(`Uncaught exception: ${err.message}`, 'error');
-});
-
-module.exports = router;
