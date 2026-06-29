@@ -524,40 +524,111 @@ router.get('/update-config', async (req, res) => {
     const socket = activeSockets.get(n);
     if (!socket) return res.status(404).json({ error: 'No active session' });
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await saveOTPToMongoDB(n, otp, newConfig);
-    try {
-        await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: `*🔐 ICON-X MD— CONFIG UPDATE*\n\nOTP: *${otp}*\nValid 5 minutes` });
-        res.json({ status: 'otp_sent' });
-    } catch (e) { res.status(500).json({ error: 'Failed to send OTP' }); }
-});
-router.get('/verify-otp', async (req, res) => {
-    const { number, otp } = req.query;
-    if (!number || !otp) return res.status(400).json({ error: 'Number and OTP required' });
-    const n = number.replace(/[^0-9]/g, '');
-    const verification = await verifyOTPFromMongoDB(n, otp);
-    if (!verification.valid) return res.status(400).json({ error: verification.error });
-    await updateUserConfigInMongoDB(n, verification.config);
-    const socket = activeSockets.get(n);
-    if (socket) await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: '*✅ CONFIG UPDATED*' });
-    res.json({ status: 'success' });
-});
-router.get('/stats', async (req, res) => {
-    const { number } = req.query;
-    if (!number) return res.status(400).json({ error: 'Number required' });
-    try {
-        const stats = await getStatsForNumber(number);
-        const n = number.replace(/[^0-9]/g, '');
-        const s = getConnectionStatus(n);
-        res.json({ number: n, connectionStatus: s.isConnected ? 'Connected' : 'Disconnected', uptime: s.uptime, stats });
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
-});
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    makeCacheableSignalKeyStore,
+    DisconnectReason,
+    jidNormalizedUser,
+    Browsers,
+    delay
+} = require("@whiskeysockets/baileys");
 
+const pino = require("pino");
+const fs = require("fs-extra");
+const path = require("path");
 
+const activeSockets = new Map();
 
-async function autoReconnectFromMongoDB() {
-    try {
-        arslanLog('Attempting auto-reconnect from MongoDB...', 'info');
-        const numbers = await getAllNumbersFromMongoDB();
+function log(msg, type = "info") {
+    const icons = {
+        info: "📝",
+        success: "✅",
+        error: "❌",
+        warn: "⚠️"
+    };
+    console.log(`${icons[type]} ${msg}`);
+}
+
+async function startBot(number) {
+    const sanitized = number.replace(/[^0-9]/g, "");
+    const sessionPath = path.join(__dirname, "session", sanitized);
+
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+
+    const sock = makeWASocket({
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
+        },
+
+        printQRInTerminal: true, // ✅ FIX: ALWAYS ENABLE QR
+
+        browser: Browsers.macOS("Safari"),
+
+        logger: pino({ level: "silent" }),
+
+        syncFullHistory: false,
+        markOnlineOnConnect: true
+    });
+
+    activeSockets.set(sanitized, sock);
+
+    // Save session
+    sock.ev.on("creds.update", saveCreds);
+
+    // CONNECTION HANDLER (FIXED)
+    sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+            log("📲 Scan QR to login WhatsApp", "info");
+        }
+
+        if (connection === "open") {
+            log(`Bot connected: ${sanitized}`, "success");
+        }
+
+        if (connection === "close") {
+            const code = lastDisconnect?.error?.output?.statusCode;
+
+            if (code === DisconnectReason.loggedOut) {
+                log("Logged out. Delete session and re-scan QR.", "error");
+                activeSockets.delete(sanitized);
+                await fs.remove(sessionPath);
+                return;
+            }
+
+            log("Reconnecting bot...", "warn");
+
+            setTimeout(() => {
+                startBot(number);
+            }, 5000);
+        }
+    });
+
+    // SIMPLE MESSAGE HANDLER
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+        const msg = messages[0];
+        if (!msg.message) return;
+
+        const from = msg.key.remoteJid;
+        const text =
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            "";
+
+        if (text === ".ping") {
+            await sock.sendMessage(from, { text: "Pong ✅ Bot is working" });
+        }
+    });
+
+    return sock;
+}
+
+// START BOT EXAMPLE
+startBot("263XXXXXXXXX");
+
         if (!numbers.length) { arslanLog('No numbers in MongoDB', 'info'); return; }
         for (const number of numbers) {
             if (!activeSockets.has(number)) {
