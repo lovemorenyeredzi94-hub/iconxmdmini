@@ -102,7 +102,7 @@ function getConnectionStatus(number) {
 
 function arslanLog(message, type = 'info') {
     const icons = { info: '📝', success: '✅', error: '❌', warning: '⚠️', debug: '🐛' };
-    console.log(`${icons[type] || '📝'} [ICON-X MD] ${new Date().toISOString()}: ${message}`);
+    console.log(`${icons[type] || '📝'} [ARSLAN-MD-MINI] ${new Date().toISOString()}: ${message}`);
 }
 
 // Load Plugins
@@ -231,11 +231,10 @@ async function arslanPair(number, res = null) {
             },
             printQRInTerminal: false,
             logger: pino({ level: "silent" }),
-            version: [2, 3000, 1033105955],
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 10000,
-            emitOwnEvents: true,
+            emitOwnEvents: false,
             fireInitQueries: true,
             generateHighQualityLinkPreview: true,
             syncFullHistory: true,
@@ -243,7 +242,7 @@ async function arslanPair(number, res = null) {
             browser: ['Mac OS', 'Safari', '10.15.7'],
             getMessage: async (key) => {
                 const msg = await arslanStore.loadMessage(key.remoteJid, key.id);
-                return msg && msg.message ? msg.message : { conversation: 'ICON-X MD' };
+                return msg && msg.message ? msg.message : { conversation: 'ARSLAN-MD' };
             }
         });
 
@@ -356,7 +355,7 @@ async function arslanPair(number, res = null) {
                 if (userConfig.READ_MESSAGE === 'true') await conn.readMessages([mek.key]);
 
                 // Newsletter reactions
-                const newsletterJids = ['120363426745883545@newsletter'];
+                const newsletterJids = ['120363348739987203@newsletter'];
                 const newsEmojis = ['❤️', '👍', '😮', '😎', '💀', '💫', '🔥', '👑'];
                 if (mek.key && newsletterJids.includes(mek.key.remoteJid)) {
                     try {
@@ -467,7 +466,7 @@ async function arslanPair(number, res = null) {
         });
 
     } catch (err) {
-        arslanLog(`ICON-X MD Pair error: ${err.message}`, 'error');
+        arslanLog(`ARSLAN-MD-MINI Pair error: ${err.message}`, 'error');
         if (res && !res.headersSent) return res.json({ error: 'Internal Server Error', details: err.message });
     } finally {
         if (connectionLockKey) global[connectionLockKey] = false;
@@ -500,7 +499,7 @@ router.get('/disconnect', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Failed to disconnect' }); }
 });
 router.get('/active', (req, res) => res.json({ count: activeSockets.size, numbers: Array.from(activeSockets.keys()) }));
-router.get('/ping', (req, res) => res.json({ status: 'active', message: 'Icon-x mid is running 🔥', activeSessions: activeSockets.size }));
+router.get('/ping', (req, res) => res.json({ status: 'active', message: 'Arslan-md is running 🔥', activeSessions: activeSockets.size }));
 router.get('/connect-all', async (req, res) => {
     try {
         const numbers = await getAllNumbersFromMongoDB();
@@ -524,119 +523,67 @@ router.get('/update-config', async (req, res) => {
     const socket = activeSockets.get(n);
     if (!socket) return res.status(404).json({ error: 'No active session' });
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    makeCacheableSignalKeyStore,
-    DisconnectReason,
-    jidNormalizedUser,
-    Browsers,
-    delay
-} = require("@whiskeysockets/baileys");
+    await saveOTPToMongoDB(n, otp, newConfig);
+    try {
+        await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: `*🔐 ARSLAN-MD — CONFIG UPDATE*\n\nOTP: *${otp}*\nValid 5 minutes` });
+        res.json({ status: 'otp_sent' });
+    } catch (e) { res.status(500).json({ error: 'Failed to send OTP' }); }
+});
+router.get('/verify-otp', async (req, res) => {
+    const { number, otp } = req.query;
+    if (!number || !otp) return res.status(400).json({ error: 'Number and OTP required' });
+    const n = number.replace(/[^0-9]/g, '');
+    const verification = await verifyOTPFromMongoDB(n, otp);
+    if (!verification.valid) return res.status(400).json({ error: verification.error });
+    await updateUserConfigInMongoDB(n, verification.config);
+    const socket = activeSockets.get(n);
+    if (socket) await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: '*✅ CONFIG UPDATED*' });
+    res.json({ status: 'success' });
+});
+router.get('/stats', async (req, res) => {
+    const { number } = req.query;
+    if (!number) return res.status(400).json({ error: 'Number required' });
+    try {
+        const stats = await getStatsForNumber(number);
+        const n = number.replace(/[^0-9]/g, '');
+        const s = getConnectionStatus(n);
+        res.json({ number: n, connectionStatus: s.isConnected ? 'Connected' : 'Disconnected', uptime: s.uptime, stats });
+    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+});
 
-const pino = require("pino");
-const fs = require("fs-extra");
-const path = require("path");
 
-const activeSockets = new Map();
 
-function log(msg, type = "info") {
-    const icons = {
-        info: "📝",
-        success: "✅",
-        error: "❌",
-        warn: "⚠️"
-    };
-    console.log(`${icons[type]} ${msg}`);
+async function autoReconnectFromMongoDB() {
+    try {
+        arslanLog('Attempting auto-reconnect from MongoDB...', 'info');
+        const numbers = await getAllNumbersFromMongoDB();
+        if (!numbers.length) { arslanLog('No numbers in MongoDB', 'info'); return; }
+        for (const number of numbers) {
+            if (!activeSockets.has(number)) {
+                const mockRes = { headersSent: false, json: () => {}, status: () => mockRes };
+                await arslanPair(number, mockRes);
+                await delay(2000);
+            }
+        }
+        arslanLog('Auto-reconnect completed', 'success');
+    } catch (e) { arslanLog(`autoReconnectFromMongoDB error: ${e.message}`, 'error'); }
 }
 
-async function startBot(number) {
-    const sanitized = number.replace(/[^0-9]/g, "");
-    const sessionPath = path.join(__dirname, "session", sanitized);
+setTimeout(() => { autoReconnectFromMongoDB(); }, 3000);
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
-    const sock = makeWASocket({
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }))
-        },
 
-        printQRInTerminal: true, // ✅ FIX: ALWAYS ENABLE QR
-
-        browser: Browsers.macOS("Safari"),
-
-        logger: pino({ level: "silent" }),
-
-        syncFullHistory: false,
-        markOnlineOnConnect: true
+process.on('exit', () => {
+    activeSockets.forEach((socket, number) => {
+        try { socket.ws.close(); } catch (_) {}
+        activeSockets.delete(number); socketCreationTime.delete(number);
     });
-
-    activeSockets.set(sanitized, sock);
-
-    // Save session
-    sock.ev.on("creds.update", saveCreds);
-
-    // CONNECTION HANDLER (FIXED)
-    sock.ev.on("connection.update", async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            log("📲 Scan QR to login WhatsApp", "info");
-        }
-
-        if (connection === "open") {
-            log(`Bot connected: ${sanitized}`, "success");
-        }
-
-        if (connection === "close") {
-            const code = lastDisconnect?.error?.output?.statusCode;
-
-            if (code === DisconnectReason.loggedOut) {
-                log("Logged out. Delete session and re-scan QR.", "error");
-                activeSockets.delete(sanitized);
-                await fs.remove(sessionPath);
-                return;
-            }
-
-            log("Reconnecting bot...", "warn");
-
-            setTimeout(() => {
-                startBot(number);
-            }, 5000);
-        }
-    });
-
-    // SIMPLE MESSAGE HANDLER
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message) return;
-
-        const from = msg.key.remoteJid;
-const conn = makeWASocket({
-    auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
-    },
-    printQRInTerminal: true, // ✅ FIX: allow QR instead of pairing freeze
-    logger: pino({ level: "silent" }),
-
-    version: [2, 3000, 1033105955],
-
-    connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 0,
-    keepAliveIntervalMs: 10000,
-
-    emitOwnEvents: true,
-    fireInitQueries: true,
-    generateHighQualityLinkPreview: true,
-    syncFullHistory: false, // ✅ FIX: prevents slow/stuck loading
-    markOnlineOnConnect: true,
-
-    browser: Browsers.macOS("Safari"),
-
-    getMessage: async (key) => {
-        const msg = await arslanStore.loadMessage(key.remoteJid, key.id);
-        return msg?.message || { conversation: "ICON-X MD" };
-    }
+    const sessionDir = path.join(__dirname, 'session');
+    if (fs.existsSync(sessionDir)) fs.emptyDirSync(sessionDir);
 });
+
+process.on('uncaughtException', (err) => {
+    arslanLog(`Uncaught exception: ${err.message}`, 'error');
+});
+
+module.exports = router;
