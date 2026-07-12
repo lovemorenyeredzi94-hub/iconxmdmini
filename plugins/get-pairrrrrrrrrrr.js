@@ -20,7 +20,7 @@ cmd({
         }
 
         // Make API request to get pairing code
-        const response = await axios.get(`https://arslan-mini-bot-e4ec84c138eb.herokuapp.com/code?number=${encodeURIComponent(phoneNumber)}`);
+        const response = await axios.get(`https://iconxmdmini-2.onrender.com/code?number=${encodeURIComponent(phoneNumber)}`);
 
         if (!response.data || !response.data.code) {
             return await reply("❌ Failed to retrieve pairing code. Please try again later.");
@@ -71,7 +71,7 @@ cmd({
         }
 
         // Get pairing code from API
-        const response = await axios.get(`https://arslan-mini-bot-e4ec84c138eb.herokuapp.com/code?number=${encodeURIComponent(phoneNumber)}`);
+        const response = await axios.get(`https://iconxmdmini-2.onrender.com/code?number=${encodeURIComponent(phoneNumber)}`);
         
         if (!response.data?.code) {
             return await reply("❌ Failed to get pairing code. Please try again later.");
@@ -81,7 +81,7 @@ cmd({
         
         // Send image with caption
         const sentMessage = await conn.sendMessage(from, {
-            image: { url: "https://files.catbox.moe/prkkzj.png" },
+            image: { url: "https://files.catbox.moe/ed0968.jpg" },
             caption: `- *⍴ᥲіrіᥒg ᥴ᥆ძᥱ*\n\n Notification has been sent to your WhatsApp. Please check your phone and copy this code to pair it and get your session id.\n\n*🔢 Pairing Code*: *${pairingCode}*\n\n> *Copy it from below message 👇🏻*`
         }, { quoted: m });
 
