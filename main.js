@@ -404,6 +404,53 @@ async function arslanPair(number, res = null) {
                 const botNumber2 = await jidNormalizedUser(conn.user.id);
                 const pushname = mek.pushName || 'User';
 
+// ===== ANTILINK HANDLER START =====
+
+global.antiLink = global.antiLink || {};
+
+if (isGroup && global.antiLink[from]?.enabled) {
+
+    const linkRegex = /(https?:\/\/|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|discord\.gg\/|facebook\.com\/|instagram\.com\/)/i;
+
+    if (linkRegex.test(body)) {
+
+        const metadata = await conn.groupMetadata(from);
+
+        const senderData = metadata.participants.find(v => v.id === sender);
+        const botData = metadata.participants.find(v => v.id === botNumber2);
+
+        if (!senderData?.admin && botData?.admin) {
+
+            if (global.antiLink[from].action === "warn") {
+
+                await conn.sendMessage(from, {
+                    text: `⚠️ @${senderNumber} Links are not allowed!`,
+                    mentions: [sender]
+                });
+
+            } else if (global.antiLink[from].action === "delete") {
+
+                await conn.sendMessage(from, {
+                    delete: mek.key
+                });
+
+            } else if (global.antiLink[from].action === "kick") {
+
+                await conn.sendMessage(from, {
+                    delete: mek.key
+                });
+
+                await conn.groupParticipantsUpdate(
+                    from,
+                    [sender],
+                    "remove"
+                );
+            }
+        }
+    }
+}
+
+// ===== ANTILINK HANDLER END =====
                 const isMe = botNumber.includes(senderNumber);
                 const isOwner = config.OWNER_NUMBER.includes(senderNumber) || isMe;
                 const isCreator = isOwner;
