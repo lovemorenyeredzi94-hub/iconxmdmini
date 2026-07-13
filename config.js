@@ -62,7 +62,7 @@ module.exports = {
     // 7. IMAGES & LIENS
     // ===========================================================
     IMAGE_PATH: 'https://files.catbox.moe/prkkzj.png',
-    CHANNEL_LINK: 'https://whatsapp.com/channel/0029VarfjW04tRrmwfb8x306',
+    CHANNEL_LINK: 'https://whatsapp.com/channel/0029Vb886p7GpLHSZRVeKQ39',
     
     // ===========================================================
     // 8. EXTERNAL API (Optionnel)
