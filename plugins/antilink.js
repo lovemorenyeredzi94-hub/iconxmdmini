@@ -1,334 +1,51 @@
-const { cmd } = require('../arslan');
-const {
-    getAntilinkSettings,
-    setAntilinkStatus,
-    setAntilinkAction,
-    setWarnCount,
-    getUserWarns,
-    resetUserWarns,
-    getGroupWarns,
-    resetAllWarns,
-    checkAntilink
-} = require('../lib/database');
+const { cmd } = require("../arslan");
 
-// Helper function to check if user is admin
-async function checkIfAdmin(conn, from, sender) {
-    try {
-        const groupMetadata = await conn.groupMetadata(from);
-        const participant = groupMetadata.participants.find(p => p.id === sender);
-        return participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
-    } catch (error) {
-        console.error('Error checking admin status:', error);
-        return false;
-    }
-}
-
-// Helper function to get group admins
-async function getGroupAdmins(conn, from) {
-    try {
-        const groupMetadata = await conn.groupMetadata(from);
-        return groupMetadata.participants
-            .filter(p => p.admin === 'admin' || p.admin === 'superadmin')
-            .map(p => p.id);
-    } catch (error) {
-        console.error('Error getting group admins:', error);
-        return [];
-    }
-}
-
-// ============ COMMAND HANDLERS ============
+global.antiLink = global.antiLink || {};
 
 cmd({
     pattern: "antilink",
-    alias: ["nolink", "linkguard"],
-    desc: "Anti-link system management",
+    desc: "Enable or disable anti-link.",
     category: "group",
-    react: "🔗"
-},
-async(conn, mek, m, { args, isGroup, reply, from, sender }) => {
-    if (!isGroup) return reply("*⚠️ THIS COMMAND IS ONLY FOR GROUPS!*");
-    
-    // Check if user is admin
-    const isAdmin = await checkIfAdmin(conn, from, sender);
-    if (!isAdmin) return reply("*⚠️ ONLY ADMINS CAN USE THIS COMMAND!*");
-    
-    // Check if bot is admin
-    const botNumber = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-    const groupAdmins = await getGroupAdmins(conn, from);
-    const isBotAdmins = groupAdmins.includes(botNumber);
-    if (!isBotAdmins) return reply("*⚠️ I NEED TO BE ADMIN TO USE THIS FEATURE!*");
+    react: "🔗",
+    filename: __filename
+}, async (conn, mek, m, { args, isGroup, isAdmins, reply }) => {
 
-    const action = args[0]?.toLowerCase();
-    const value = args[1]?.toLowerCase();
+    if (!isGroup) return reply("❌ This command is only for groups.");
+    if (!isAdmins) return reply("❌ Admin only.");
 
-    const settings = await getAntilinkSettings(from);
-    const status = settings.status;
-    const currentAction = settings.action;
-    const warnCount = settings.warnCount;
+    let option = (args[0] || "").toLowerCase();
 
-    if (!action) {
-        const statusText = status ? '✅ *ACTIVE*' : '❌ *INACTIVE*';
-        const actionText = {
-            delete: '🗑️ DELETE',
-            warn: '⚠️ WARN',
-            kick: '👢 KICK'
-        }[currentAction] || '🗑️ DELETE';
+    if (!option) {
+        return reply(`*ANTI LINK SETTINGS*
 
-        const help = `📌 *ANTI-LINK SYSTEM*
-
-${statusText}
-📋 *Action:* ${actionText}
-⚠️ *Max Warnings:* ${warnCount}
-
-*Commands:*
-➤ ${m.prefix}antilink on - Activate
-➤ ${m.prefix}antilink off - Deactivate
-➤ ${m.prefix}antilink delete - Set delete action
-➤ ${m.prefix}antilink warn - Set warn action
-➤ ${m.prefix}antilink kick - Set kick action
-➤ ${m.prefix}antilink warncount <number> - Set max warnings
-➤ ${m.prefix}resetwarn @user - Reset user warnings
-➤ ${m.prefix}warns - View all warnings
-➤ ${m.prefix}resetallwarns - Reset all warnings
-➤ ${m.prefix}antilinksettings - View settings`;
-
-        return reply(help);
+.antilink on
+.antilink off
+.antilink warn
+.antilink delete
+.antilink kick`);
     }
 
-    try {
-        if (action === 'on' || action === 'enable') {
-            await setAntilinkStatus(from, true);
-            await reply("*✅ ANTI-LINK SYSTEM ACTIVATED!*");
-        } 
-        else if (action === 'off' || action === 'disable') {
-            await setAntilinkStatus(from, false);
-            await reply("*❌ ANTI-LINK SYSTEM DEACTIVATED!*");
-        } 
-        else if (action === 'delete' || action === 'warn' || action === 'kick') {
-            await setAntilinkAction(from, action);
-            await reply(`*✅ ACTION SET TO: ${action.toUpperCase()}*`);
-        } 
-        else if (action === 'warncount') {
-            if (!value || isNaN(value) || parseInt(value) < 1) {
-                return reply(`*⚠️ PLEASE PROVIDE A VALID NUMBER!*\nExample: ${m.prefix}antilink warncount 5`);
-            }
-            await setWarnCount(from, parseInt(value));
-            await reply(`*✅ MAX WARNINGS SET TO: ${value}*`);
-        } 
-        else {
-            reply(`*❌ UNKNOWN COMMAND!*\nUse ${m.prefix}antilink for help.`);
-        }
-    } catch (error) {
-        reply(`*❌ ERROR: ${error.message}*`);
+    if (option === "off") {
+        delete global.antiLink[m.chat];
+        return reply("✅ AntiLink disabled.");
     }
+
+    if (option === "on") {
+        global.antiLink[m.chat] = {
+            enabled: true,
+            action: "delete"
+        };
+        return reply("✅ AntiLink enabled.\nAction: DELETE");
+    }
+
+    if (["warn", "delete", "kick"].includes(option)) {
+        global.antiLink[m.chat] = {
+            enabled: true,
+            action: option
+        };
+
+        return reply(`✅ AntiLink enabled.\nAction: ${option.toUpperCase()}`);
+    }
+
+    reply("Invalid option.");
 });
-
-cmd({
-    pattern: "resetwarn",
-    alias: ["resetwarning", "clearwarn"],
-    desc: "Reset user warnings",
-    category: "group",
-    react: "🔄"
-},
-async(conn, mek, m, { isGroup, reply, from, sender, mentionedJid }) => {
-    if (!isGroup) return reply("*⚠️ THIS COMMAND IS ONLY FOR GROUPS!*");
-    
-    // Check if user is admin
-    const isAdmin = await checkIfAdmin(conn, from, sender);
-    if (!isAdmin) return reply("*⚠️ ONLY ADMINS CAN USE THIS COMMAND!*");
-
-    if (!mentionedJid || mentionedJid.length === 0) {
-        return reply(`*⚠️ MENTION A USER TO RESET THEIR WARNINGS!*\nExample: ${m.prefix}resetwarn @user`);
-    }
-
-    const user = mentionedJid[0];
-    const userWarns = await getUserWarns(from, user);
-    
-    if (userWarns > 0) {
-        await resetUserWarns(from, user);
-        await reply(`*✅ WARNINGS RESET FOR @${user.split('@')[0]}*`, { mentions: [user] });
-    } else {
-        await reply(`*ℹ️ @${user.split('@')[0]} HAS NO WARNINGS*`, { mentions: [user] });
-    }
-});
-
-cmd({
-    pattern: "warns",
-    alias: ["warnings", "checkwarn"],
-    desc: "Check user warnings",
-    category: "group",
-    react: "📊"
-},
-async(conn, mek, m, { isGroup, reply, from, sender }) => {
-    if (!isGroup) return reply("*⚠️ THIS COMMAND IS ONLY FOR GROUPS!*");
-    
-    // Check if user is admin
-    const isAdmin = await checkIfAdmin(conn, from, sender);
-    if (!isAdmin) return reply("*⚠️ ONLY ADMINS CAN USE THIS COMMAND!*");
-
-    const groupWarns = await getGroupWarns(from);
-    
-    if (!groupWarns || Object.keys(groupWarns).length === 0) {
-        return reply("*ℹ️ NO WARNINGS IN THIS GROUP*");
-    }
-
-    let warnList = "*📊 WARNING LIST*\n\n";
-    let totalWarns = 0;
-    
-    for (const [user, count] of Object.entries(groupWarns)) {
-        if (count > 0) {
-            const username = user.split('@')[0];
-            warnList += `👤 @${username}: ${count} warning${count > 1 ? 's' : ''}\n`;
-            totalWarns += count;
-        }
-    }
-    
-    warnList += `\n📊 *Total Warnings:* ${totalWarns}`;
-    warnList += `\n👥 *Users Warned:* ${Object.keys(groupWarns).length}`;
-
-    await reply(warnList, { mentions: Object.keys(groupWarns) });
-});
-
-cmd({
-    pattern: "resetallwarns",
-    alias: ["clearallwarns", "resetall"],
-    desc: "Reset all warnings in group",
-    category: "group",
-    react: "🗑️"
-},
-async(conn, mek, m, { isGroup, reply, from, sender }) => {
-    if (!isGroup) return reply("*⚠️ THIS COMMAND IS ONLY FOR GROUPS!*");
-    
-    // Check if user is admin
-    const isAdmin = await checkIfAdmin(conn, from, sender);
-    if (!isAdmin) return reply("*⚠️ ONLY ADMINS CAN USE THIS COMMAND!*");
-    
-    const groupWarns = await getGroupWarns(from);
-    if (!groupWarns || Object.keys(groupWarns).length === 0) {
-        return reply("*ℹ️ NO WARNINGS TO RESET*");
-    }
-    
-    await resetAllWarns(from);
-    reply("*✅ ALL WARNINGS HAVE BEEN RESET!*");
-});
-
-cmd({
-    pattern: "antilinksettings",
-    alias: ["alsettings", "linksettings"],
-    desc: "View antilink settings",
-    category: "group",
-    react: "⚙️"
-},
-async(conn, mek, m, { isGroup, reply, from, sender }) => {
-    if (!isGroup) return reply("*⚠️ THIS COMMAND IS ONLY FOR GROUPS!*");
-    
-    // Check if user is admin
-    const isAdmin = await checkIfAdmin(conn, from, sender);
-    if (!isAdmin) return reply("*⚠️ ONLY ADMINS CAN USE THIS COMMAND!*");
-    
-    const settings = await getAntilinkSettings(from);
-    const groupWarns = await getGroupWarns(from);
-    const totalWarns = Object.values(groupWarns).reduce((a, b) => a + b, 0);
-    const warnedUsers = Object.keys(groupWarns).length;
-    
-    const settingsText = `⚙️ *ANTI-LINK SETTINGS*
-
-📌 Status: ${settings.status ? '✅ ACTIVE' : '❌ INACTIVE'}
-🎯 Action: ${settings.action.toUpperCase()}
-⚠️ Max Warnings: ${settings.warnCount}
-👥 Users Warned: ${warnedUsers}
-📊 Total Warnings: ${totalWarns}
-
-${settings.status ? '🛡️ Protection is active!' : '🔓 Protection is inactive!'}`;
-    
-    reply(settingsText);
-});
-
-// ============ AUTO-LINK DETECTION ============
-// This runs automatically for every message
-module.exports = {
-    on: 'body',
-    function: async (conn, mek, m, { from, isGroup, sender, isBotAdmins }) => {
-        try {
-            // Only process in groups
-            if (!isGroup) return;
-            
-            // Skip if message is from bot
-            if (sender === conn.user.id) return;
-            
-            // Check if sender is admin
-            const isAdmin = await checkIfAdmin(conn, from, sender);
-            if (isAdmin) return; // Skip admins
-            
-            // Skip if bot is not admin
-            if (!isBotAdmins) return;
-            
-            // Get text from message
-            let text = '';
-            const msgType = Object.keys(mek.message)[0];
-            
-            if (msgType === 'conversation') {
-                text = mek.message.conversation;
-            } else if (msgType === 'extendedTextMessage') {
-                text = mek.message.extendedTextMessage.text;
-            } else if (msgType === 'imageMessage') {
-                text = mek.message.imageMessage.caption || '';
-            } else if (msgType === 'videoMessage') {
-                text = mek.message.videoMessage.caption || '';
-            } else if (msgType === 'documentMessage') {
-                text = mek.message.documentMessage.caption || '';
-            }
-            
-            if (!text) return;
-            
-            // Check for links
-            const result = await checkAntilink(from, sender, text);
-            
-            if (result) {
-                // Delete the message
-                if (mek.key) {
-                    try {
-                        await conn.sendMessage(from, { delete: mek.key });
-                    } catch (e) {
-                        console.error('Failed to delete message:', e);
-                    }
-                }
-                
-                // Send notification
-                const mention = `@${sender.split('@')[0]}`;
-                let notificationText = `${result.message}\n${mention}`;
-                
-                // Handle different actions
-                if (result.action === 'delete') {
-                    await conn.sendMessage(from, {
-                        text: notificationText,
-                        mentions: [sender]
-                    });
-                } 
-                else if (result.action === 'warn') {
-                    const warns = result.warns || 0;
-                    const maxWarns = result.maxWarns || 3;
-                    notificationText = `${result.message}\n${mention}\n\n⚠️ Warning ${warns}/${maxWarns}`;
-                    await conn.sendMessage(from, {
-                        text: notificationText,
-                        mentions: [sender]
-                    });
-                } 
-                else if (result.action === 'kick') {
-                    try {
-                        await conn.groupParticipantsUpdate(from, [sender], 'remove');
-                        await conn.sendMessage(from, {
-                            text: notificationText,
-                            mentions: [sender]
-                        });
-                    } catch (e) {
-                        console.error('Failed to kick user:', e);
-                    }
-                }
-            }
-            
-        } catch (error) {
-            console.error('Antilink detection error:', error);
-        }
-    }
-};
