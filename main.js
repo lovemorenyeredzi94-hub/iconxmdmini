@@ -30,7 +30,6 @@ const {
     getStatsForNumber
 } = require('./lib/database');
 const { handleAntidelete } = require('./lib/antidelete');
-const { isAdmin, isBotAdmin, getGroupAdmins, hasPermission } = require('./lib/isAdmin');
 
 const express = require('express');
 const fs = require('fs-extra');
@@ -103,7 +102,7 @@ function getConnectionStatus(number) {
 
 function arslanLog(message, type = 'info') {
     const icons = { info: '📝', success: '✅', error: '❌', warning: '⚠️', debug: '🐛' };
-    console.log(`${icons[type] || '📝'} [ICON-X-MINI] ${new Date().toISOString()}: ${message}`);
+    console.log(`${icons[type] || '📝'} [ICON-X MD] ${new Date().toISOString()}: ${message}`);
 }
 
 // Load Plugins
@@ -183,11 +182,6 @@ function setupAutoRestart(socket, number) {
 
 
 async function arslanPair(number, res = null) {
-    // ============ ADD THIS AT THE START ============
-    // Store reference to arslanPair globally for health checks
-    global.arslanPair = arslanPair;
-    // ============ END ============
-    
     let connectionLockKey;
     const sanitizedNumber = number.replace(/[^0-9]/g, '');
 
@@ -231,131 +225,32 @@ async function arslanPair(number, res = null) {
         const arslanStore = createarslanStore();
 
         const conn = makeWASocket({
-    auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
-    },
-    printQRInTerminal: false,
-    logger: pino({ level: "silent" }),
-    connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 0,
-    keepAliveIntervalMs: 10000,
-    emitOwnEvents: false,
-    fireInitQueries: true,
-    generateHighQualityLinkPreview: true,
-    syncFullHistory: true,
-    markOnlineOnConnect: true,
-    browser: ['Mac OS', 'Safari', '10.15.7'],
-    getMessage: async (key) => {
-        const msg = await arslanStore.loadMessage(key.remoteJid, key.id);
-        return msg && msg.message ? msg.message : { conversation: 'ICON-X MD MINI' };
-    }
-});
-
-socketCreationTime.set(sanitizedNumber, Date.now());
-activeSockets.set(sanitizedNumber, conn);
-arslanStore.bind(conn.ev);
-
-// ============ 🔥 ADD THIS CODE HERE ============
-// ============ CONNECTION HEALTH MONITORING ============
-
-// Make activeSockets global for health checks
-global.activeSockets = activeSockets;
-
-// Store connection info for health monitoring
-const connectionInfo = {
-    socket: conn,
-    number: sanitizedNumber,
-    lastMessage: Date.now(),
-    reconnectAttempts: 0,
-    isHealthy: true,
-    lastHealthCheck: Date.now(),
-    createdAt: Date.now()
-};
-
-// Store in global for health checks
-if (!global.connectionHealth) global.connectionHealth = new Map();
-global.connectionHealth.set(sanitizedNumber, connectionInfo);
-
-// ============ HEARTBEAT INTERVAL ============
-// Ping the socket every 30 seconds to keep it alive
-const heartbeatInterval = setInterval(() => {
-    try {
-        if (conn && conn.ws && conn.ws.readyState === 1) {
-            // Send a ping to keep connection alive
-            conn.ws.ping();
-            connectionInfo.lastMessage = Date.now();
-            connectionInfo.isHealthy = true;
-        } else {
-            connectionInfo.isHealthy = false;
-            const states = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
-            const stateText = conn?.ws ? states[conn.ws.readyState] || 'UNKNOWN' : 'NO_WS';
-            console.log(`⚠️ Socket for ${sanitizedNumber} appears unhealthy (state: ${stateText})`);
-        }
-    } catch (e) {
-        console.log(`❌ Heartbeat error for ${sanitizedNumber}:`, e.message);
-        connectionInfo.isHealthy = false;
-    }
-}, 30000); // Every 30 seconds
-
-// Store interval for cleanup
-if (!global.heartbeatIntervals) global.heartbeatIntervals = new Map();
-global.heartbeatIntervals.set(sanitizedNumber, heartbeatInterval);
-
-// ============ ENHANCED CONNECTION UPDATE HANDLER ============
-// Replace your existing connection.update with this enhanced version
-conn.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
-    
-    if (connection === 'open') {
-        console.log(`✅ Connection OPEN for ${sanitizedNumber}`);
-        connectionInfo.isHealthy = true;
-        connectionInfo.reconnectAttempts = 0;
-        connectionInfo.lastMessage = Date.now();
-        
-        // Send a test message to confirm connection
-        try {
-            if (conn.user) {
-                await conn.sendMessage(conn.user.id, { 
-                    text: `✅ *Bot Reconnected Successfully!*\n\n📱 Number: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}`
-                });
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, logger),
+            },
+            printQRInTerminal: false,
+            logger: pino({ level: "silent" }),
+            version: [2, 3000, 1033105955],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000,
+            emitOwnEvents: true,
+            fireInitQueries: true,
+            generateHighQualityLinkPreview: true,
+            syncFullHistory: true,
+            markOnlineOnConnect: true,
+            browser: ['Mac OS', 'Safari', '10.15.7'],
+            getMessage: async (key) => {
+                const msg = await arslanStore.loadMessage(key.remoteJid, key.id);
+                return msg && msg.message ? msg.message : { conversation: 'ICON-X MD' };
             }
-        } catch (e) {
-            console.log('Failed to send test message:', e.message);
-        }
-    }
-    
-    if (connection === 'close') {
-        console.log(`⚠️ Connection CLOSED for ${sanitizedNumber}`);
-        connectionInfo.isHealthy = false;
-        
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const errorMessage = lastDisconnect?.error?.message;
-        
-        console.log(`   Status Code: ${statusCode}`);
-        console.log(`   Error: ${errorMessage}`);
-        
-        // Don't auto-reconnect on logout (401)
-        if (statusCode !== 401 && !errorMessage?.includes('401')) {
-            console.log(`🔄 Scheduling reconnect for ${sanitizedNumber} in 5s...`);
-            
-            setTimeout(async () => {
-                try {
-                    console.log(`🔄 Attempting reconnect for ${sanitizedNumber}...`);
-                    const mockRes = { 
-                        headersSent: false, 
-                        json: () => {}, 
-                        status: () => mockRes,
-                        send: () => {}
-                    };
-                    await arslanPair(sanitizedNumber, mockRes);
-                } catch (e) {
-                    console.error(`❌ Reconnect failed for ${sanitizedNumber}:`, e.message);
-                }
-            }, 5000);
-        }
-    }
-});
+        });
+
+        socketCreationTime.set(sanitizedNumber, Date.now());
+        activeSockets.set(sanitizedNumber, conn);
+        arslanStore.bind(conn.ev);
+
         // Setup handlers
         setupCallHandlers(conn, number);
         setupAutoRestart(conn, number);
@@ -436,7 +331,7 @@ conn.ev.on('connection.update', async (update) => {
                 if (!existingSession) {
                     await conn.sendMessage(userJid, {
                         image: { url: config.IMAGE_PATH },
-                        caption: `\n╭────────────────────◇\n│✦ *ICON-X MD — CONNECTED* 🔥\n│✦ Type *${prefix}menu* to see all commands 💫\n│✦ Prefix 『 ${prefix} 』  Mode 〔${mode}〕\n╰────────────────────○\n*© Powered by Mr Elephant*`
+                        caption: `\n╭────────────────────◇\n│✦ *ARSLAN-MD — CONNECTED* 🔥\n│✦ Type *${prefix}menu* to see all commands 💫\n│✦ Prefix 『 ${prefix} 』  Mode 〔${mode}〕\n╰────────────────────○\n*© Powered by ARSLAN-MD*`
                     });
                 }
             }
@@ -447,194 +342,132 @@ conn.ev.on('connection.update', async (update) => {
         });
 
 
-        // ============ MODIFIED MESSAGES.UPSERT WITH HEALTH CHECK ============
-conn.ev.on('messages.upsert', async (msg) => {
-    try {
-        // ============ 🔥 ADD THIS HEALTH CHECK AT THE START ============
-        // Update last message time for health monitoring
-        if (connectionInfo) {
-            connectionInfo.lastMessage = Date.now();
-            connectionInfo.isHealthy = true;
-        }
-        
-        // Check if socket is healthy before processing
-        if (!conn || !conn.ws || conn.ws.readyState !== 1) {
-            console.log(`⚠️ Socket unhealthy for ${sanitizedNumber}, attempting to recover...`);
-            try { 
-                if (conn.ws) conn.ws.ping(); 
-            } catch (e) {}
-            
-            // If still unhealthy, trigger reconnect
-            if (!conn.ws || conn.ws.readyState !== 1) {
-                console.log(`❌ Socket dead for ${sanitizedNumber}, triggering reconnect...`);
-                setTimeout(async () => {
+        conn.ev.on('messages.upsert', async (msg) => {
+            try {
+                let mek = msg.messages[0];
+                if (!mek.message) return;
+
+                const userConfig = await getUserConfigFromMongoDB(number);
+
+                mek.message = (getContentType(mek.message) === 'ephemeralMessage')
+                    ? mek.message.ephemeralMessage.message
+                    : mek.message;
+
+                if (userConfig.READ_MESSAGE === 'true') await conn.readMessages([mek.key]);
+
+                // Newsletter reactions
+                const newsletterJids = ['120363426745883545@newsletter'];
+                const newsEmojis = ['❤️', '👍', '😮', '😎', '💀', '💫', '🔥', '👑'];
+                if (mek.key && newsletterJids.includes(mek.key.remoteJid)) {
                     try {
-                        const mockRes = { 
-                            headersSent: false, 
-                            json: () => {}, 
-                            status: () => mockRes,
-                            send: () => {}
-                        };
-                        await arslanPair(sanitizedNumber, mockRes);
-                    } catch (e) {
-                        console.error(`❌ Reconnect failed:`, e.message);
-                    }
-                }, 3000);
-                return; // Skip processing this message
-            }
-        }
-        // ============ END OF HEALTH CHECK ============
-        
-        // ============ YOUR EXISTING CODE CONTINUES ============
-        let mek = msg.messages[0];
-        if (!mek.message) return;
-
-        const userConfig = await getUserConfigFromMongoDB(number);
-
-        mek.message = (getContentType(mek.message) === 'ephemeralMessage')
-            ? mek.message.ephemeralMessage.message
-            : mek.message;
-
-        if (userConfig.READ_MESSAGE === 'true') await conn.readMessages([mek.key]);
-
-        // Newsletter reactions
-        const newsletterJids = ['120363426745883545@newsletter'];
-        const newsEmojis = ['❤️', '👍', '😮', '😎', '💀', '💫', '🔥', '👑'];
-        if (mek.key && newsletterJids.includes(mek.key.remoteJid)) {
-            try {
-                const serverId = mek.newsletterServerId;
-                if (serverId) {
-                    const emoji = newsEmojis[Math.floor(Math.random() * newsEmojis.length)];
-                    await conn.newsletterReactMessage(mek.key.remoteJid, serverId.toString(), emoji);
+                        const serverId = mek.newsletterServerId;
+                        if (serverId) {
+                            const emoji = newsEmojis[Math.floor(Math.random() * newsEmojis.length)];
+                            await conn.newsletterReactMessage(mek.key.remoteJid, serverId.toString(), emoji);
+                        }
+                    } catch (_) {}
                 }
-            } catch (_) {}
-        }
 
-        // Status handling
-        if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-            if (userConfig.AUTO_VIEW_STATUS === 'true') await conn.readMessages([mek.key]);
-            if (userConfig.AUTO_LIKE_STATUS === 'true') {
-                const botJid = await conn.decodeJid(conn.user.id);
-                const emojis = userConfig.AUTO_LIKE_EMOJI || config.AUTO_LIKE_EMOJI;
-                const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-                await conn.sendMessage(mek.key.remoteJid, { react: { text: randomEmoji, key: mek.key } }, { statusJidList: [mek.key.participant, botJid] });
-            }
-            if (userConfig.AUTO_STATUS_REPLY === 'true') {
-                const user = mek.key.participant;
-                await conn.sendMessage(user, { text: userConfig.AUTO_STATUS_MSG || config.AUTO_STATUS_MSG }, { quoted: mek });
-            }
-            return;
-        }
+                // Status handling
+                if (mek.key && mek.key.remoteJid === 'status@broadcast') {
+                    if (userConfig.AUTO_VIEW_STATUS === 'true') await conn.readMessages([mek.key]);
+                    if (userConfig.AUTO_LIKE_STATUS === 'true') {
+                        const botJid = await conn.decodeJid(conn.user.id);
+                        const emojis = userConfig.AUTO_LIKE_EMOJI || config.AUTO_LIKE_EMOJI;
+                        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+                        await conn.sendMessage(mek.key.remoteJid, { react: { text: randomEmoji, key: mek.key } }, { statusJidList: [mek.key.participant, botJid] });
+                    }
+                    if (userConfig.AUTO_STATUS_REPLY === 'true') {
+                        const user = mek.key.participant;
+                        await conn.sendMessage(user, { text: userConfig.AUTO_STATUS_MSG || config.AUTO_STATUS_MSG }, { quoted: mek });
+                    }
+                    return;
+                }
 
-        const m = sms(conn, mek);
-        const type = getContentType(mek.message);
-        const from = mek.key.remoteJid;
-        const body = (type === 'conversation') ? mek.message.conversation
-            : (type === 'extendedTextMessage') ? mek.message.extendedTextMessage.text : '';
+                const m = sms(conn, mek);
+                const type = getContentType(mek.message);
+                const from = mek.key.remoteJid;
+                const body = (type === 'conversation') ? mek.message.conversation
+                    : (type === 'extendedTextMessage') ? mek.message.extendedTextMessage.text : '';
 
-        const isCmd = body.startsWith(config.PREFIX);
-        const command = isCmd ? body.slice(config.PREFIX.length).trim().split(' ').shift().toLowerCase() : '';
-        const args = body.trim().split(/ +/).slice(1);
-        const q = args.join(' ');
-        const text = q;
-        const isGroup = from.endsWith('@g.us');
+                const isCmd = body.startsWith(config.PREFIX);
+                const command = isCmd ? body.slice(config.PREFIX.length).trim().split(' ').shift().toLowerCase() : '';
+                const args = body.trim().split(/ +/).slice(1);
+                const q = args.join(' ');
+                const text = q;
+                const isGroup = from.endsWith('@g.us');
 
-        const sender = mek.key.fromMe
-            ? (conn.user.id.split(':')[0] + '@s.whatsapp.net')
-            : (mek.key.participant || mek.key.remoteJid);
-        const senderNumber = sender.split('@')[0];
-        const botNumber = conn.user.id.split(':')[0];
-        const botNumber2 = await jidNormalizedUser(conn.user.id);
-        const pushname = mek.pushName || 'User';
+                const sender = mek.key.fromMe
+                    ? (conn.user.id.split(':')[0] + '@s.whatsapp.net')
+                    : (mek.key.participant || mek.key.remoteJid);
+                const senderNumber = sender.split('@')[0];
+                const botNumber = conn.user.id.split(':')[0];
+                const botNumber2 = await jidNormalizedUser(conn.user.id);
+                const pushname = mek.pushName || 'User';
 
-        const isMe = botNumber.includes(senderNumber);
-        const isOwner = config.OWNER_NUMBER.includes(senderNumber) || isMe;
-        const isCreator = isOwner;
+                const isMe = botNumber.includes(senderNumber);
+                const isOwner = config.OWNER_NUMBER.includes(senderNumber) || isMe;
+                const isCreator = isOwner;
 
-        let groupMetadata = null, groupName = null, participants = null;
-        let groupAdmins = null, isBotAdmins = null, isAdmins = null;
+                let groupMetadata = null, groupName = null, participants = null;
+                let groupAdmins = null, isBotAdmins = null, isAdmins = null;
 
-        if (isGroup) {
-            try {
-                groupMetadata = await conn.groupMetadata(from);
-                groupName = groupMetadata.subject;
-                participants = groupMetadata.participants;
-                groupAdmins = getGroupAdmins(participants);
-                isBotAdmins = groupAdmins.some(admin => 
-                    admin.includes(botNumber2.split('@')[0]) || admin === botNumber2
-                );
-                isAdmins = groupAdmins.some(admin => 
-                    admin.includes(sender.split('@')[0]) || admin === sender
-                );
-            } catch (_) {}
-        }
+                if (isGroup) {
+                    try {
+                        groupMetadata = await conn.groupMetadata(from);
+                        groupName = groupMetadata.subject;
+                        participants = groupMetadata.participants;
+                        groupAdmins = getGroupAdmins(participants);
+                        isBotAdmins = groupAdmins.includes(botNumber2);
+                        isAdmins = groupAdmins.includes(sender);
+                    } catch (_) {}
+                }
 
-        if (userConfig.AUTO_TYPING === 'true') await conn.sendPresenceUpdate('composing', from);
-        if (userConfig.AUTO_RECORDING === 'true') await conn.sendPresenceUpdate('recording', from);
+                if (userConfig.AUTO_TYPING === 'true') await conn.sendPresenceUpdate('composing', from);
+                if (userConfig.AUTO_RECORDING === 'true') await conn.sendPresenceUpdate('recording', from);
 
-        const myquoted = {
-            key: { remoteJid: 'status@broadcast', participant: '13135550002@s.whatsapp.net', fromMe: false, id: createSerial(16).toUpperCase() },
-            message: { contactMessage: {
-                displayName: '© MR ELEPHANT',
-                vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:ICON-X MDBOY\nORG:Mr Elephant;\nTEL;type=CELL;type=VOICE;waid=263781328870:263782313021\nEND:VCARD`,
-                contextInfo: { stanzaId: createSerial(16).toUpperCase(), participant: '0@s.whatsapp.net', quotedMessage: { conversation: '© ICON-X MD' } }
-            }},
-            messageTimestamp: Math.floor(Date.now() / 1000),
-            status: 1, verifiedBizName: 'Meta'
-        };
+                const myquoted = {
+                    key: { remoteJid: 'status@broadcast', participant: '13135550002@s.whatsapp.net', fromMe: false, id: createSerial(16).toUpperCase() },
+                    message: { contactMessage: {
+                        displayName: '© ARSLAN-MD',
+                        vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:ARSLAN-MD BOY\nORG:ARSLAN-MD BOY;\nTEL;type=CELL;type=VOICE;waid=13135550002:13135550002\nEND:VCARD`,
+                        contextInfo: { stanzaId: createSerial(16).toUpperCase(), participant: '0@s.whatsapp.net', quotedMessage: { conversation: '© ARSLAN-MD' } }
+                    }},
+                    messageTimestamp: Math.floor(Date.now() / 1000),
+                    status: 1, verifiedBizName: 'Meta'
+                };
 
-        const reply = (text) => conn.sendMessage(from, { text }, { quoted: myquoted });
-        const l = reply;
+                const reply = (text) => conn.sendMessage(from, { text }, { quoted: myquoted });
+                const l = reply;
 
-        if (isCmd) {
-            await incrementStats(sanitizedNumber, 'commandsUsed');
-            const cmd = events.commands.find(c => c.pattern === command) || events.commands.find(c => c.alias && c.alias.includes(command));
-            if (cmd) {
-                if (config.WORK_TYPE === 'private' && !isOwner) return;
-                if (cmd.react) conn.sendMessage(from, { react: { text: cmd.react, key: mek.key } });
-                try {
-                    cmd.function(conn, mek, m, { 
-                        from, quoted: mek, body, isCmd, command, args, q, text, 
-                        isGroup, sender, senderNumber, botNumber2, botNumber, 
-                        pushname, isMe, isOwner, isCreator, 
-                        groupMetadata, groupName, participants, 
-                        groupAdmins, isBotAdmins, 
-                        isAdmin: isAdmins,
-                        reply, config, myquoted 
-                    });
-                } catch (e) { arslanLog(`PLUGIN ERROR [${command}]: ${e.message}`, 'error'); }
-            }
-        }
+                if (isCmd) {
+                    await incrementStats(sanitizedNumber, 'commandsUsed');
+                    const cmd = events.commands.find(c => c.pattern === command) || events.commands.find(c => c.alias && c.alias.includes(command));
+                    if (cmd) {
+                        if (config.WORK_TYPE === 'private' && !isOwner) return;
+                        if (cmd.react) conn.sendMessage(from, { react: { text: cmd.react, key: mek.key } });
+                        try {
+                            cmd.function(conn, mek, m, { from, quoted: mek, body, isCmd, command, args, q, text, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, isCreator, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply, config, myquoted });
+                        } catch (e) { arslanLog(`PLUGIN ERROR [${command}]: ${e.message}`, 'error'); }
+                    }
+                }
 
-        await incrementStats(sanitizedNumber, 'messagesReceived');
-        if (isGroup) await incrementStats(sanitizedNumber, 'groupsInteracted');
+                await incrementStats(sanitizedNumber, 'messagesReceived');
+                if (isGroup) await incrementStats(sanitizedNumber, 'groupsInteracted');
 
-        events.commands.map(async (evCmd) => {
-            const ctx = { 
-                from, l, quoted: mek, body, isCmd, command, args, q, text, 
-                isGroup, sender, senderNumber, botNumber2, botNumber, 
-                pushname, isMe, isOwner, isCreator, 
-                groupMetadata, groupName, participants, 
-                groupAdmins, isBotAdmins, 
-                isAdmin: isAdmins,
-                reply, config, myquoted 
-            };
-            if (body && evCmd.on === 'body') evCmd.function(conn, mek, m, ctx);
-            else if (mek.q && evCmd.on === 'text') evCmd.function(conn, mek, m, ctx);
-            else if ((evCmd.on === 'image' || evCmd.on === 'photo') && mek.type === 'imageMessage') evCmd.function(conn, mek, m, ctx);
-            else if (evCmd.on === 'sticker' && mek.type === 'stickerMessage') evCmd.function(conn, mek, m, ctx);
-        });
-
-    } catch (e) { 
-        arslanLog(`Message handler error: ${e.message}`, 'error'); 
-    }
-});
+                events.commands.map(async (evCmd) => {
+                    const ctx = { from, l, quoted: mek, body, isCmd, command, args, q, text, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, isCreator, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply, config, myquoted };
+                    if (body && evCmd.on === 'body') evCmd.function(conn, mek, m, ctx);
+                    else if (mek.q && evCmd.on === 'text') evCmd.function(conn, mek, m, ctx);
+                    else if ((evCmd.on === 'image' || evCmd.on === 'photo') && mek.type === 'imageMessage') evCmd.function(conn, mek, m, ctx);
+                    else if (evCmd.on === 'sticker' && mek.type === 'stickerMessage') evCmd.function(conn, mek, m, ctx);
+                });
 
             } catch (e) { arslanLog(`Message handler error: ${e.message}`, 'error'); }
         });
 
     } catch (err) {
-        arslanLog(`ICON-X-MINI Pair error: ${err.message}`, 'error');
+        arslanLog(`ICON-X MD Pair error: ${err.message}`, 'error');
         if (res && !res.headersSent) return res.json({ error: 'Internal Server Error', details: err.message });
     } finally {
         if (connectionLockKey) global[connectionLockKey] = false;
@@ -667,7 +500,7 @@ router.get('/disconnect', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Failed to disconnect' }); }
 });
 router.get('/active', (req, res) => res.json({ count: activeSockets.size, numbers: Array.from(activeSockets.keys()) }));
-router.get('/ping', (req, res) => res.json({ status: 'active', message: 'ICON-X MD is running 🔥', activeSessions: activeSockets.size }));
+router.get('/ping', (req, res) => res.json({ status: 'active', message: 'Icon-x mid is running 🔥', activeSessions: activeSockets.size }));
 router.get('/connect-all', async (req, res) => {
     try {
         const numbers = await getAllNumbersFromMongoDB();
@@ -693,7 +526,7 @@ router.get('/update-config', async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await saveOTPToMongoDB(n, otp, newConfig);
     try {
-        await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: `*🔐 ICON-X M— CONFIG UPDATE*\n\nOTP: *${otp}*\nValid 5 minutes` });
+        await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: `*🔐 ICON-X MD— CONFIG UPDATE*\n\nOTP: *${otp}*\nValid 5 minutes` });
         res.json({ status: 'otp_sent' });
     } catch (e) { res.status(500).json({ error: 'Failed to send OTP' }); }
 });
