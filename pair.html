@@ -1,467 +1,930 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ICON-X MINI</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICON-X MD - WhatsApp Bot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ========================================
+           PROFESSIONAL DARK THEME WITH RGB ACCENTS
+        ======================================== */
 
-<style>
-/* ===============================
-   RGB NEON RAINBOW EDITION
-   Full Replacement CSS
-=============================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-/* =========================
-   BLACK UI + RGB TEXT ONLY
-========================= */
+        :root {
+            --primary: #00f5ff;
+            --secondary: #ff00e4;
+            --accent: #ffaa00;
+            --dark: #0a0a0f;
+            --darker: #050508;
+            --card-bg: rgba(10, 10, 20, 0.85);
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #ffffff;
+            --text-muted: rgba(255, 255, 255, 0.6);
+        }
 
-:root{
-    --rgb-speed:16s;
-}
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--darker);
+            color: var(--text);
+            background-image: 
+                radial-gradient(ellipse at 20% 50%, rgba(0, 245, 255, 0.05) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 50%, rgba(255, 0, 228, 0.05) 0%, transparent 60%);
+            position: relative;
+            overflow-x: hidden;
+        }
 
-/* reset */
-*{
-    box-sizing:border-box;
-    margin:0;
-    padding:0;
-}
+        /* Animated Background Particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.1), transparent),
+                radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.08), transparent),
+                radial-gradient(2px 2px at 50px 160px, rgba(255,255,255,0.06), transparent),
+                radial-gradient(2px 2px at 90px 40px, rgba(255,255,255,0.1), transparent),
+                radial-gradient(2px 2px at 130px 80px, rgba(255,255,255,0.07), transparent),
+                radial-gradient(2px 2px at 160px 30px, rgba(255,255,255,0.08), transparent);
+            background-size: 200px 200px;
+            pointer-events: none;
+            z-index: 0;
+            animation: twinkle 4s ease-in-out infinite alternate;
+        }
 
-/* rainbow text animation */
-@keyframes rgbText{
-    0%{background-position:0%}
-    100%{background-position:400%}
-}
+        @keyframes twinkle {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
 
-/* body */
-body{
-    min-height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-family:'Poppins',sans-serif;
-    background:#000;
-    color:#fff;
-}
+        /* Main Card */
+        .main-card {
+            position: relative;
+            z-index: 1;
+            width: 95%;
+            max-width: 440px;
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 30px;
+            padding: 40px 30px 35px;
+            border: 1px solid var(--border);
+            box-shadow: 
+                0 30px 80px rgba(0, 0, 0, 0.8),
+                0 0 60px rgba(0, 245, 255, 0.03),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: all 0.4s ease;
+        }
 
-/* card */
-.card{
-    width:90%;
-    max-width:400px;
-    background:#000;
-    border-radius:22px;
-    padding:28px 22px;
-    text-align:center;
-    border:1px solid #111;
+        /* Glow Border Animation */
+        .main-card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border-radius: 32px;
+            background: linear-gradient(45deg, 
+                var(--primary), 
+                var(--secondary), 
+                var(--accent), 
+                var(--primary)
+            );
+            background-size: 300% 300%;
+            z-index: -1;
+            opacity: 0.3;
+            animation: borderGlow 6s ease-in-out infinite;
+            transition: opacity 0.4s ease;
+        }
 
-    box-shadow:
-        0 0 20px rgba(255,255,255,0.05);
-}
+        .main-card:hover::before {
+            opacity: 0.7;
+        }
 
-/* RGB TEXT STYLE */
-.rgb-text{
-    background:linear-gradient(
-        90deg,
-        red,orange,yellow,green,cyan,blue,violet,red
-    );
-    background-size:400%;
-    animation:rgbText var(--rgb-speed) linear infinite;
+        @keyframes borderGlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
 
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
-}
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
 
-/* title */
-h1{
-    font-size:1.9rem;
-    margin-bottom:6px;
-}
+        .logo-icon {
+            font-size: 3.5rem;
+            display: inline-block;
+            margin-bottom: 10px;
+            animation: pulseGlow 2s ease-in-out infinite;
+        }
 
-/* status */
-.status{
-    font-size:.8rem;
-    letter-spacing:1px;
-    margin-bottom:22px;
-}
+        @keyframes pulseGlow {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(0, 245, 255, 0.3)); }
+            50% { filter: drop-shadow(0 0 40px rgba(255, 0, 228, 0.4)); }
+        }
 
-/* input wrapper */
-.input-wrap{
-    background:#000;
-    border-radius:14px;
-    padding:2px;
-    margin-bottom:16px;
-    border:1px solid #111;
-}
+        .brand-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent), var(--primary));
+            background-size: 300% 100%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientMove 4s ease-in-out infinite;
+            letter-spacing: 2px;
+        }
 
-/* input */
-input{
-    width:100%;
-    border:none;
-    outline:none;
-    padding:14px;
-    border-radius:12px;
-    background:#000;
-    color:#fff;
-    text-align:center;
-    font-size:1rem;
-}
+        @keyframes gradientMove {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
 
-input::placeholder{
-    color:#555;
-}
+        .sub-title {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
 
-/* button */
-button{
-    width:100%;
-    border:1px solid #111;
-    border-radius:14px;
-    padding:14px;
-    font-size:1rem;
-    font-weight:600;
-    cursor:pointer;
-    background:#000;
-    color:#fff;
-    transition:.2s;
-}
+        .sub-title span {
+            color: var(--primary);
+            -webkit-text-fill-color: var(--primary);
+        }
 
-button:hover{
-    background:#111;
-}
+        /* Status Indicator */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 25px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 8px 16px;
+            background: var(--glass);
+            border-radius: 50px;
+            border: 1px solid var(--border);
+        }
 
-/* result */
-#result{
-    margin-top:20px;
-    min-height:60px;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:10px;
-}
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff88;
+            animation: dotPulse 1.5s ease-in-out infinite;
+            display: inline-block;
+        }
 
-/* code display */
-.code-display{
-    padding:10px 18px;
-    border-radius:12px;
-    border:1px dashed #222;
-    letter-spacing:4px;
-    cursor:pointer;
-    background:#000;
-}
+        @keyframes dotPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
 
-/* loader */
-.loader{
-    width:28px;
-    height:28px;
-    border:3px solid #222;
-    border-top:3px solid #fff;
-    border-radius:50%;
-    animation:spin 1s linear infinite;
-}
+        .status-dot.offline {
+            background: #ff4444;
+            animation: none;
+        }
 
-@keyframes spin{
-    to{transform:rotate(360deg)}
-}
+        /* Input Container - RGB Border */
+        .input-wrapper {
+            position: relative;
+            margin-bottom: 18px;
+            border-radius: 16px;
+            padding: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent), var(--primary));
+            background-size: 300% 100%;
+            animation: borderFlow 4s linear infinite;
+            transition: all 0.3s ease;
+        }
 
-/* footer */
-footer{
-    margin-top:18px;
-    font-size:.7rem;
-    color:#555;
-}
-    
-/* ===== RGB BORDER INPUT ===== */
+        .input-wrapper:focus-within {
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.15);
+        }
 
-@keyframes rgbMove{
-    0%{background-position:0%}
-    100%{background-position:300%}
-}
+        @keyframes borderFlow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 300% 50%; }
+        }
 
-@keyframes rgbText{
-    0%{background-position:0%}
-    100%{background-position:400%}
-}
-/* =========================================
-   UPDATED RGB NEON RAINBOW CSS
-   ========================================= */
+        .input-wrapper input {
+            width: 100%;
+            padding: 16px 20px;
+            background: var(--dark);
+            border: none;
+            border-radius: 14px;
+            color: var(--text);
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-align: center;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
 
-/* Input Box Container (Tight RGB Border) */
-.rgb-box {
-    padding: 2px; /* Border ki thickness */
-    border-radius: 12px;
-    background: linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet, red);
-    background-size: 300%;
-    animation: rgbMove 4s linear infinite;
-    width: 100%;
-    max-width: 320px;
-    margin: 0 auto 20px auto;
-}
+        .input-wrapper input::placeholder {
+            color: var(--text-muted);
+            font-weight: 300;
+            letter-spacing: 0;
+        }
 
-/* Input Field (Pure Black Background + White Text) */
-.rgb-box input {
-    width: 100%;
-    border: none;
-    outline: none;
-    padding: 14px;
-    border-radius: 11px; /* Inner radius slightly smaller than outer */
-    background: #000; /* Pure Black */
-    color: #fff; /* Typing color White */
-    text-align: center;
-    font-size: 1.1rem;
-    font-family: 'Poppins', sans-serif;
-    -webkit-text-fill-color: #fff; /* Ensure text is white */
-}
+        .input-wrapper input:focus {
+            outline: none;
+            background: #0a0a14;
+        }
 
-/* Placeholder Color */
-.rgb-box input::placeholder {
-    color: #555;
-    -webkit-text-fill-color: #555;
-}
+        .input-label {
+            position: absolute;
+            top: -10px;
+            left: 20px;
+            background: var(--dark);
+            padding: 0 10px;
+            font-size: 0.7rem;
+            color: var(--primary);
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 4px;
+        }
 
-/* Get Code Button (Matching Style) */
-.rgb-btn {
-    width: 100%;
-    max-width: 320px;
-    padding: 2px; /* Border space */
-    border-radius: 12px;
-    background: linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet, red);
-    background-size: 300%;
-    animation: rgbMove 4s linear infinite;
-    border: none;
-    cursor: pointer;
-    display: block;
-    margin: 0 auto;
-    transition: transform 0.2s;
-}
+        /* Country Code Hint */
+        .country-hint {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 18px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
 
-/* Inner Button Background */
-.btn-inner {
-    background: #000;
-    color: #fff;
-    display: block;
-    padding: 12px;
-    border-radius: 11px;
-    font-weight: 700;
-    font-size: 1rem;
-    text-transform: uppercase;
-}
+        .country-hint span {
+            padding: 4px 12px;
+            background: var(--glass);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
 
-.rgb-btn:hover {
-    transform: scale(1.03);
-}
+        .country-hint span:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
 
-/* Animations */
-@keyframes rgbMove {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 300% 50%; }
-}
+        /* Button */
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            border-radius: 16px;
+            border: none;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            cursor: pointer;
+            color: #fff;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
 
-@keyframes rgbText {
-    0% { background-position: 0%; }
-    100% { background-position: 400%; }
-}/* Permanent Result Box with RGB Border */
-.result-box {
-    width: 100%;
-    max-width: 320px;
-    margin: 20px auto;
-    padding: 2px; /* Border ki thickness */
-    border-radius: 15px;
-    background: linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet, red);
-    background-size: 400%;
-    animation: rgbMove 5s linear infinite;
-    position: relative;
-}
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: all 0.6s ease;
+        }
 
-/* Inner Black Area */
-.result-inner {
-    background: #000;
-    border-radius: 13px;
-    padding: 15px;
-    min-height: 50px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 1.1rem;
-    font-weight: 600;
-    text-align: center;
-}
+        .btn-primary:hover::before {
+            left: 100%;
+        }
 
-/* Code Display Styling */
-#codeBox {
-    letter-spacing: 4px;
-    color: #fff;
-    cursor: pointer;
-}
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(0, 245, 255, 0.2);
+        }
 
-@keyframes rgbMove {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 100% 50%; }
-}
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
 
-/* Base Container */
-.rgb-container {
-    padding: 5px; /* Border Thickness */
-    position: relative;
-    border-radius: 15px;
-    background: linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet, red, orange, yellow);
-    background-size: 200% 100%;
-    width: 100%;
-    max-width: 320px;
-    margin: 15px auto;
-}
+        .btn-primary i {
+            margin-right: 10px;
+        }
 
-/* 1st & 3rd Box: Right ki taraf chalne wala */
-.move-right {
-    animation: scrollRight 3s linear infinite;
-}
+        /* Result Box */
+        .result-wrapper {
+            margin-top: 20px;
+            border-radius: 16px;
+            padding: 2px;
+            background: linear-gradient(90deg, var(--secondary), var(--accent), var(--primary));
+            background-size: 300% 100%;
+            animation: borderFlow 4s linear infinite;
+            display: none;
+            transition: all 0.5s ease;
+        }
 
-/* 2nd Box: Left ki taraf chalne wala */
-.move-left {
-    animation: scrollLeft 3s linear infinite;
-}
+        .result-wrapper.show {
+            display: block;
+            animation: slideUp 0.5s ease forwards;
+        }
 
-/* Animations Logic */
-@keyframes scrollRight {
-    0% { background-position: 0% 0%; }
-    100% { background-position: 200% 0%; }
-}
+        @keyframes slideUp {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
 
-@keyframes scrollLeft {
-    0% { background-position: 0% 0%; }
-    100% { background-position: -200% 0%; }
-}
+        .result-inner {
+            background: var(--dark);
+            border-radius: 14px;
+            padding: 20px;
+            text-align: center;
+            min-height: 70px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
 
-/* Inner Black Box */
-.inner-box {
-    background: #000 !important;
-    color: #fff !important;
-    border-radius: 11px;
-    width: 100%;
-    padding: 14px;
-    border: none;
-    outline: none;
-    text-align: center;
-    font-weight: 600;
-}
+        .result-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
 
-/* Sabhi boxes ke liye ek hi permanent style 
+        .result-code {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.2rem;
+            font-weight: 700;
+            letter-spacing: 6px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
 
+        .result-code:hover {
+            transform: scale(1.05);
+            filter: brightness(1.2);
+        }
 
+        .result-hint {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
 
+        .result-hint i {
+            margin-right: 5px;
+        }
 
-/* Click karne par border gayab hone se bachane ke liye */
-.rgb-container:focus-within, 
-.inner-box:focus {
-    outline: none;
-    box-shadow: 0 0 10px rgba(255,255,255,0.1);
-}
+        /* Error State */
+        .result-code.error {
+            -webkit-text-fill-color: #ff4444;
+            font-size: 1rem;
+            letter-spacing: 1px;
+        }
 
-@keyframes rgbMove {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 100% 50%; }
-}
+        .result-code.loading {
+            -webkit-text-fill-color: var(--text-muted);
+            font-size: 1rem;
+            letter-spacing: 2px;
+            animation: loadingDots 1s steps(4) infinite;
+        }
 
+        @keyframes loadingDots {
+            0% { content: '.'; }
+            25% { content: '..'; }
+            50% { content: '...'; }
+            75% { content: '....'; }
+        }
 
+        /* Footer */
+        .footer {
+            margin-top: 25px;
+            text-align: center;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
 
-   
-</style>
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.75rem;
+            transition: all 0.3s ease;
+            letter-spacing: 1px;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        .footer-links a i {
+            margin-right: 6px;
+        }
+
+        .footer-credit {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            opacity: 0.5;
+            letter-spacing: 1px;
+        }
+
+        .footer-credit span {
+            color: var(--accent);
+            -webkit-text-fill-color: var(--accent);
+        }
+
+        /* Session Info */
+        .session-info {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .session-info .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .session-info .info-item i {
+            color: var(--primary);
+            font-size: 0.6rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .main-card {
+                padding: 25px 18px;
+                border-radius: 20px;
+            }
+            .brand-name {
+                font-size: 1.4rem;
+            }
+            .logo-icon {
+                font-size: 2.8rem;
+            }
+            .result-code {
+                font-size: 1.8rem;
+                letter-spacing: 4px;
+            }
+            .footer-links {
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .brand-name {
+                font-size: 1.1rem;
+            }
+            .result-code {
+                font-size: 1.4rem;
+                letter-spacing: 2px;
+            }
+            .country-hint {
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 10px;
+        }
+    </style>
 </head>
 <body>
 
-<div class="card">
-
-<h1 class="rgb-text">👑ICON-X MINI👑</h1>
-<h1 class="rgb-text">PAIR CODE</h1>
-
-<p class="status rgb-text">TYPE YOUR WHATSAPP NUMBER</p>
-
-<div class="rgb-container move-right">
-    <input type="text" id="number" class="inner-box" placeholder="263000000000">
-</div>
-
-<div class="rgb-container move-left">     <button class="inner-box" onclick="getCode()">GET PAIR CODE</button> </div> 
-
-<div class="rgb-container move-right" id="borderBox" style="display:none;">
-    <div class="inner-box" id="codeBox">----</div>
-</div>
-
-<p class="status rgb-text">WHATSAPP BOT</p>
-
-<p class="status rgb-text">MADE BY MR ELEPHANT </p>
-
-<p class="status rgb-text">ICON-X MINI BOT EDITION 2026</p>
-   
-</div>
-
-
-<script>
-  async function getCode() {
-    const num = document.getElementById("number").value.replace(/[^0-9]/g, '');
-    const codeBox = document.getElementById("codeBox");
-    const borderBox = document.getElementById("borderBox");
-
-    // Agar number khali hai
-    if (!num) {
-        borderBox.style.display = "block"; // Box show karo
-        codeBox.style.letterSpacing = "normal"; // Error ke liye spacing normal
-        codeBox.style.color = "#ff4d4d"; // Error color Red
-        codeBox.innerText = "APNA WHATSAPP NUMBER LIKHE";
-        return;
-    }
-
-    // Loading State
-    borderBox.style.display = "block";
-    codeBox.style.letterSpacing = "normal";
-    codeBox.style.color = "#fff"; 
-    codeBox.innerText = "CONNECTING.....";
-
-    try {
-        const res = await fetch(`/code?number=${num}`);
-        const data = await res.json();
+    <div class="main-card">
         
-        if (data.code) {
-            codeBox.style.letterSpacing = "4px"; // Code ke liye spacing wapis
-            codeBox.style.color = "#fff"; 
-            codeBox.innerText = data.code;
-        } else {
-            codeBox.style.color = "#ff4d4d";
-            codeBox.innerText = "SERVER FULL";
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-icon">🤖</div>
+            <div class="brand-name">ICON-X MD</div>
+            <div class="sub-title">⚡ <span>Premium</span> WhatsApp Bot ⚡</div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">System Ready</span>
+            <span style="opacity:0.3;">|</span>
+            <span id="sessionCount">0 Active</span>
+        </div>
+
+        <!-- Input -->
+        <div class="input-wrapper">
+            <span class="input-label">📱 Phone Number</span>
+            <input type="text" id="number" placeholder="Enter WhatsApp Number (e.g., 263712345678)" autofocus>
+        </div>
+
+        <!-- Country Hints -->
+        <div class="country-hint">
+            <span onclick="setNumber('263')">🇿🇼 +263</span>
+            <span onclick="setNumber('92')">🇵🇰 +92</span>
+            <span onclick="setNumber('91')">🇮🇳 +91</span>
+            <span onclick="setNumber('1')">🇺🇸 +1</span>
+            <span onclick="setNumber('44')">🇬🇧 +44</span>
+        </div>
+
+        <!-- Get Code Button -->
+        <button class="btn-primary" onclick="getCode()" id="getBtn">
+            <i class="fas fa-link"></i> Get Pair Code
+        </button>
+
+        <!-- Result Box -->
+        <div class="result-wrapper" id="resultWrapper">
+            <div class="result-inner">
+                <div class="result-label">✦ Pairing Code ✦</div>
+                <div class="result-code" id="codeBox">------</div>
+                <div class="result-hint">
+                    <i class="fas fa-copy"></i> Click code to copy
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Info -->
+        <div class="session-info">
+            <span class="info-item"><i class="fas fa-circle"></i> Encrypted</span>
+            <span class="info-item"><i class="fas fa-circle"></i> Secure</span>
+            <span class="info-item"><i class="fas fa-circle"></i> 24/7 Online</span>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-links">
+                <a href="#" onclick="event.preventDefault();"><i class="fas fa-book"></i> Docs</a>
+                <a href="#" onclick="event.preventDefault();"><i class="fas fa-shield-alt"></i> Privacy</a>
+                <a href="#" onclick="event.preventDefault();"><i class="fas fa-headset"></i> Support</a>
+                <a href="#" onclick="event.preventDefault();"><i class="fas fa-github"></i> GitHub</a>
+            </div>
+            <div class="footer-credit">
+                Made with <span>❤️</span> by <span>MR ELEPHANT</span> • v2.0
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ========================================
+        // MAIN SCRIPT
+        // ========================================
+
+        // DOM Elements
+        const numberInput = document.getElementById('number');
+        const codeBox = document.getElementById('codeBox');
+        const resultWrapper = document.getElementById('resultWrapper');
+        const getBtn = document.getElementById('getBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const sessionCount = document.getElementById('sessionCount');
+
+        // Auto-focus on load
+        window.addEventListener('load', () => {
+            numberInput.focus();
+            checkSessionStatus();
+        });
+
+        // Enter key support
+        numberInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                getCode();
+            }
+        });
+
+        // Auto-format: only numbers
+        numberInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^0-9+]/g, '');
+        });
+
+        // Country Code Helper
+        function setNumber(code) {
+            const current = numberInput.value.replace(/[^0-9]/g, '');
+            if (current.startsWith(code)) {
+                numberInput.value = current;
+            } else {
+                numberInput.value = code + current;
+            }
+            numberInput.focus();
+            // Move cursor to end
+            numberInput.setSelectionRange(numberInput.value.length, numberInput.value.length);
         }
-    } catch (e) {
-        codeBox.style.color = "#ff4d4d";
-        codeBox.innerText = "SERVER IS FULL";
-    }
-}
 
-  
+        // ========================================
+        // GET PAIR CODE
+        // ========================================
 
+        async function getCode() {
+            // Get and clean number
+            let raw = numberInput.value.replace(/[^0-9]/g, '');
+            
+            // Validate
+            if (!raw || raw.length < 10) {
+                showResult('❌ Enter a valid WhatsApp number', 'error');
+                updateStatus('Invalid Number', 'offline');
+                return;
+            }
 
+            // Ensure country code (if starts with 3 and length = 10, add 92 for Pakistan)
+            if (raw.startsWith('3') && raw.length === 10) {
+                raw = '92' + raw;
+            }
 
+            // Show loading state
+            getBtn.disabled = true;
+            getBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+            updateStatus('Connecting...', 'loading');
+            
+            // Show result with loading
+            resultWrapper.classList.add('show');
+            codeBox.className = 'result-code loading';
+            codeBox.textContent = 'Connecting';
 
+            try {
+                const response = await fetch(`/code?number=${raw}`);
+                const data = await response.json();
 
+                if (response.ok && data.code) {
+                    // Success
+                    showResult(data.code, 'success');
+                    updateStatus('Connected ✅', 'online');
+                    
+                    // Play success sound (optional)
+                    playSound('success');
+                    
+                    // Auto-copy
+                    copyToClipboard(data.code);
+                    
+                } else if (data.status === 'already_connected') {
+                    showResult('✅ Already Connected', 'success');
+                    updateStatus('Connected ✅', 'online');
+                    
+                } else if (data.status === 'connection_in_progress') {
+                    showResult('⏳ Connection in progress...', 'loading');
+                    updateStatus('Connecting...', 'loading');
+                    
+                } else {
+                    // Error
+                    const errorMsg = data.error || data.message || 'Failed to get code';
+                    showResult('❌ ' + errorMsg, 'error');
+                    updateStatus('Error', 'offline');
+                    playSound('error');
+                }
 
-function copyCode(code) {
-    navigator.clipboard.writeText(code);
-    const display = document.querySelector('.code-display');
-    const originalText = display.innerText;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showResult('❌ Server connection failed', 'error');
+                updateStatus('Server Error', 'offline');
+                playSound('error');
+            }
 
-    display.innerText = "COPIED";
-    display.style.borderColor = "var(--success)";
-    display.style.color = "var(--success)";
+            // Reset button
+            setTimeout(() => {
+                getBtn.disabled = false;
+                getBtn.innerHTML = '<i class="fas fa-link"></i> Get Pair Code';
+            }, 1000);
+        }
 
-    setTimeout(() => {
-        display.innerText = originalText;
-        display.style.borderColor = "var(--soft)";
-        display.style.color = "var(--soft)";
-    }, 1500);
-}
+        // ========================================
+        // SHOW RESULT
+        // ========================================
 
-// Optional: Simple placeholder sound function
-function playSound(type) {
-    // You can add real sounds here later if you want
-}
-</script>
+        function showResult(message, type = 'success') {
+            resultWrapper.classList.add('show');
+            codeBox.className = 'result-code';
+            
+            if (type === 'error') {
+                codeBox.classList.add('error');
+                codeBox.textContent = message;
+            } else if (type === 'loading') {
+                codeBox.classList.add('loading');
+                codeBox.textContent = message;
+            } else {
+                // Success - code
+                codeBox.textContent = message;
+                // Click to copy
+                codeBox.onclick = () => {
+                    copyToClipboard(message);
+                    codeBox.style.transform = 'scale(0.95)';
+                    setTimeout(() => codeBox.style.transform = 'scale(1)', 200);
+                };
+            }
+        }
+
+        // ========================================
+        // COPY TO CLIPBOARD
+        // ========================================
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast('📋 Code copied!');
+                }).catch(() => {
+                    fallbackCopy(text);
+                });
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('📋 Code copied!');
+            } catch (e) {
+                showToast('❌ Failed to copy');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // ========================================
+        // TOAST NOTIFICATION
+        // ========================================
+
+        function showToast(message) {
+            let toast = document.getElementById('toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toast';
+                toast.style.cssText = `
+                    position: fixed;
+                    bottom: 30px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: rgba(0,0,0,0.9);
+                    color: #fff;
+                    padding: 12px 28px;
+                    border-radius: 12px;
+                    font-size: 0.9rem;
+                    font-family: 'Rajdhani', sans-serif;
+                    border: 1px solid rgba(0,245,255,0.2);
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                    z-index: 9999;
+                    opacity: 0;
+                    transition: all 0.4s ease;
+                    pointer-events: none;
+                `;
+                document.body.appendChild(toast);
+            }
+            
+            toast.textContent = message;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+            
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-50%) translateY(20px)';
+            }, 3000);
+        }
+
+        // ========================================
+        // STATUS MANAGEMENT
+        // ========================================
+
+        function updateStatus(text, state = 'online') {
+            statusText.textContent = text;
+            statusDot.className = 'status-dot';
+            if (state === 'offline' || state === 'error') {
+                statusDot.classList.add('offline');
+            } else if (state === 'loading') {
+                statusDot.style.animation = 'dotPulse 0.5s ease-in-out infinite';
+            } else {
+                statusDot.style.animation = 'dotPulse 1.5s ease-in-out infinite';
+            }
+        }
+
+        // ========================================
+        // CHECK SESSION STATUS
+        // ========================================
+
+        async function checkSessionStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                if (data.totalActive > 0) {
+                    sessionCount.textContent = `${data.totalActive} Active`;
+                    updateStatus('System Ready ✅', 'online');
+                } else {
+                    sessionCount.textContent = '0 Active';
+                    updateStatus('Ready to Pair', 'online');
+                }
+            } catch (e) {
+                console.log('Status check failed:', e);
+            }
+        }
+
+        // Check status every 30 seconds
+        setInterval(checkSessionStatus, 30000);
+
+        // ========================================
+        // SOUND EFFECTS (Optional)
+        // ========================================
+
+        function playSound(type) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                if (type === 'success') {
+                    osc.frequency.setValueAtTime(800, ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.15);
+                } else if (type === 'error') {
+                    osc.frequency.setValueAtTime(400, ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(200, ctx.currentTime + 0.2);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.2);
+                }
+            } catch (e) {
+                // Audio not supported, ignore
+            }
+        }
+
+        // ========================================
+        // KEYBOARD SHORTCUTS
+        // ========================================
+
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+K to focus input
+            if (e.ctrlKey && e.key === 'k') {
+                e.preventDefault();
+                numberInput.focus();
+                numberInput.select();
+            }
+            // Escape to clear result
+            if (e.key === 'Escape') {
+                resultWrapper.classList.remove('show');
+            }
+        });
+
+        console.log('🤖 ICON-X MD Pairing System Loaded');
+        console.log('📱 Enter your WhatsApp number to get pairing code');
+        console.log('⌨️  Ctrl+K to focus input');
+    </script>
 
 </body>
 </html>
