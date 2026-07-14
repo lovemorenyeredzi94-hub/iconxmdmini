@@ -30,6 +30,7 @@ const {
     getStatsForNumber
 } = require('./lib/database');
 const { handleAntidelete } = require('./lib/antidelete');
+const { isAdmin, isBotAdmin, getGroupAdmins, hasPermission } = require('./lib/isAdmin');
 
 const express = require('express');
 const fs = require('fs-extra');
@@ -44,12 +45,18 @@ const prefix = config.PREFIX;
 const mode = config.MODE || config.WORK_TYPE;
 const router = express.Router();
 
+// ============ GLOBAL DECLARATIONS ============
+global.activeSockets = new Map();
+global.connectionHealth = new Map();
+global.wsIntervals = new Map();
+global.healthCheckIntervals = new Map();
+global.socketCreationTime = new Map();
+// ===========================================
 
 connectdb();
 
 const activeSockets = new Map();
 const socketCreationTime = new Map();
-
 
 function createarslanStore() {
     const store = {
@@ -102,7 +109,7 @@ function getConnectionStatus(number) {
 
 function arslanLog(message, type = 'info') {
     const icons = { info: '📝', success: '✅', error: '❌', warning: '⚠️', debug: '🐛' };
-    console.log(`${icons[type] || '📝'} [ARSLAN-MD-MINI] ${new Date().toISOString()}: ${message}`);
+    console.log(`${icons[type] || '📝'} [ICON-X-MINI] ${new Date().toISOString()}: ${message}`);
 }
 
 // Load Plugins
@@ -114,7 +121,6 @@ for (const file of pluginFiles) {
     try { require(path.join(pluginsDir, file)); }
     catch (e) { arslanLog(`Failed to load plugin ${file}: ${e.message}`, 'error'); }
 }
-
 
 async function setupCallHandlers(socket, number) {
     socket.ev.on('call', async (calls) => {
@@ -135,51 +141,206 @@ async function setupCallHandlers(socket, number) {
     });
 }
 
+// ============ ENHANCED AUTO RESTART ============
 function setupAutoRestart(socket, number) {
     let restartAttempts = 0;
-    const maxRestartAttempts = 3;
+    const maxRestartAttempts = 5;
+    let lastMessageTime = Date.now();
+    let healthCheckInterval = null;
+    const sanitizedNumber = number.replace(/[^0-9]/g, '');
+    let isReconnecting = false;
 
+    // Monitor message activity
+    socket.ev.on('messages.upsert', () => {
+        lastMessageTime = Date.now();
+        restartAttempts = 0;
+        if (isReconnecting) {
+            isReconnecting = false;
+            arslanLog(`✅ Auto-reconnect successful for ${number}`, 'success');
+        }
+    });
+
+    // Health check every 30 seconds
+    healthCheckInterval = setInterval(() => {
+        const timeSinceLastMessage = Date.now() - lastMessageTime;
+        
+        if (timeSinceLastMessage > 180000) {
+            const isHealthy = socket && socket.ws && socket.ws.readyState === 1;
+            
+            if (!isHealthy && !isReconnecting) {
+                arslanLog(`⚠️ No activity for ${Math.floor(timeSinceLastMessage/1000)}s and socket unhealthy for ${number}`, 'warning');
+                
+                if (restartAttempts < maxRestartAttempts) {
+                    restartAttempts++;
+                    isReconnecting = true;
+                    arslanLog(`🔄 Health check restart attempt ${restartAttempts}/${maxRestartAttempts} for ${number}`, 'warning');
+                    
+                    if (global.activeSockets) {
+                        global.activeSockets.delete(sanitizedNumber);
+                    }
+                    if (global.socketCreationTime) {
+                        global.socketCreationTime.delete(sanitizedNumber);
+                    }
+                    
+                    if (global.connectionHealth) {
+                        const info = global.connectionHealth.get(sanitizedNumber);
+                        if (info) {
+                            info.isHealthy = false;
+                            info.reconnectAttempts = restartAttempts;
+                        }
+                    }
+                    
+                    setTimeout(async () => {
+                        try {
+                            const mockRes = { 
+                                headersSent: false, 
+                                send: () => {}, 
+                                status: () => mockRes, 
+                                setHeader: () => {}, 
+                                json: () => {} 
+                            };
+                            await arslanPair(number, mockRes);
+                            arslanLog(`✅ Restart initiated for ${number}`, 'success');
+                        } catch (e) {
+                            arslanLog(`❌ Restart failed for ${number}: ${e.message}`, 'error');
+                            isReconnecting = false;
+                        }
+                    }, 5000);
+                } else {
+                    arslanLog(`❌ Max health check attempts reached for ${number}`, 'error');
+                }
+            }
+        }
+    }, 30000);
+
+    if (!global.healthCheckIntervals) global.healthCheckIntervals = new Map();
+    global.healthCheckIntervals.set(sanitizedNumber, healthCheckInterval);
+
+    // Connection update handler
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
+        
+        if (connection === 'open') {
+            arslanLog(`✅ Connection OPEN for ${number}`, 'success');
+            restartAttempts = 0;
+            lastMessageTime = Date.now();
+            isReconnecting = false;
+            
+            if (global.connectionHealth) {
+                const info = global.connectionHealth.get(sanitizedNumber);
+                if (info) {
+                    info.isHealthy = true;
+                    info.lastMessage = Date.now();
+                    info.reconnectAttempts = 0;
+                }
+            }
+        }
+        
         if (connection === 'close') {
-            const statusCode = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.statusCode;
-            const errorMessage = lastDisconnect && lastDisconnect.error && lastDisconnect.error.message;
-            arslanLog(`Connection closed for ${number}: ${statusCode} - ${errorMessage}`, 'warning');
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const errorMessage = lastDisconnect?.error?.message;
+            arslanLog(`⚠️ Connection CLOSED for ${number}: ${statusCode} - ${errorMessage}`, 'warning');
+
+            if (global.connectionHealth) {
+                const info = global.connectionHealth.get(sanitizedNumber);
+                if (info) {
+                    info.isHealthy = false;
+                }
+            }
 
             if (statusCode === 401 || (errorMessage && errorMessage.includes('401'))) {
-                arslanLog(`Manual unlink detected for ${number}, cleaning up...`, 'warning');
-                const sanitizedNumber = number.replace(/[^0-9]/g, '');
-                activeSockets.delete(sanitizedNumber);
-                socketCreationTime.delete(sanitizedNumber);
-                await deleteSessionFromMongoDB(sanitizedNumber);
-                await removeNumberFromMongoDB(sanitizedNumber);
+                arslanLog(`🔴 Manual unlink detected for ${number}, cleaning up...`, 'error');
+                const sanitizedNum = number.replace(/[^0-9]/g, '');
+                
+                if (global.activeSockets) global.activeSockets.delete(sanitizedNum);
+                if (global.socketCreationTime) global.socketCreationTime.delete(sanitizedNum);
+                if (global.wsIntervals) {
+                    const intervals = global.wsIntervals.get(sanitizedNum);
+                    if (intervals) {
+                        clearInterval(intervals.wsPingInterval);
+                        clearInterval(intervals.presenceInterval);
+                        global.wsIntervals.delete(sanitizedNum);
+                    }
+                }
+                if (global.healthCheckIntervals) {
+                    const interval = global.healthCheckIntervals.get(sanitizedNum);
+                    if (interval) {
+                        clearInterval(interval);
+                        global.healthCheckIntervals.delete(sanitizedNum);
+                    }
+                }
+                if (global.connectionHealth) {
+                    global.connectionHealth.delete(sanitizedNum);
+                }
+                
+                try {
+                    await deleteSessionFromMongoDB(sanitizedNum);
+                    await removeNumberFromMongoDB(sanitizedNum);
+                } catch (e) {
+                    arslanLog(`Failed to clean MongoDB: ${e.message}`, 'error');
+                }
+                
                 socket.ev.removeAllListeners();
                 return;
             }
 
             const isNormalError = statusCode === 408 || (errorMessage && errorMessage.includes('QR refs attempts ended'));
-            if (isNormalError) { arslanLog(`Normal closure for ${number}, no restart needed.`, 'info'); return; }
+            if (isNormalError) { 
+                arslanLog(`Normal closure for ${number}, no restart needed.`, 'info'); 
+                return; 
+            }
 
             if (restartAttempts < maxRestartAttempts) {
                 restartAttempts++;
-                arslanLog(`Reconnecting ${number} (${restartAttempts}/${maxRestartAttempts}) in 10s...`, 'warning');
-                const sanitizedNumber = number.replace(/[^0-9]/g, '');
-                activeSockets.delete(sanitizedNumber);
-                socketCreationTime.delete(sanitizedNumber);
+                isReconnecting = true;
+                arslanLog(`🔄 Reconnecting ${number} (${restartAttempts}/${maxRestartAttempts}) in 10s...`, 'warning');
+                
+                const sanitizedNum = number.replace(/[^0-9]/g, '');
+                
+                if (global.activeSockets) global.activeSockets.delete(sanitizedNum);
+                if (global.socketCreationTime) global.socketCreationTime.delete(sanitizedNum);
+                if (global.connectionHealth) {
+                    const info = global.connectionHealth.get(sanitizedNum);
+                    if (info) {
+                        info.isHealthy = false;
+                        info.reconnectAttempts = restartAttempts;
+                    }
+                }
+                
                 socket.ev.removeAllListeners();
-                await delay(10000);
-                try {
-                    const mockRes = { headersSent: false, send: () => {}, status: () => mockRes, setHeader: () => {}, json: () => {} };
-                    await arslanPair(number, mockRes);
-                } catch (e) { arslanLog(`Reconnection failed for ${number}: ${e.message}`, 'error'); }
+                
+                setTimeout(async () => {
+                    try {
+                        const mockRes = { 
+                            headersSent: false, 
+                            send: () => {}, 
+                            status: () => mockRes, 
+                            setHeader: () => {}, 
+                            json: () => {} 
+                        };
+                        await arslanPair(number, mockRes);
+                        arslanLog(`✅ Reconnection initiated for ${number}`, 'success');
+                    } catch (e) {
+                        arslanLog(`❌ Reconnection failed for ${number}: ${e.message}`, 'error');
+                        isReconnecting = false;
+                    }
+                }, 10000);
             } else {
-                arslanLog(`Max restart attempts reached for ${number}.`, 'error');
+                arslanLog(`❌ Max restart attempts reached for ${number}.`, 'error');
+                isReconnecting = false;
             }
         }
-        if (connection === 'open') { restartAttempts = 0; }
     });
-}
 
+    return function cleanup() {
+        if (healthCheckInterval) {
+            clearInterval(healthCheckInterval);
+        }
+        if (global.healthCheckIntervals) {
+            global.healthCheckIntervals.delete(sanitizedNumber);
+        }
+    };
+}
 
 async function arslanPair(number, res = null) {
     let connectionLockKey;
@@ -203,7 +364,6 @@ async function arslanPair(number, res = null) {
         }
         global[connectionLockKey] = true;
 
-        // Check MongoDB session
         const existingSession = await getSessionFromMongoDB(sanitizedNumber);
 
         if (!existingSession) {
@@ -213,7 +373,6 @@ async function arslanPair(number, res = null) {
                 arslanLog(`Cleaned leftover local session for ${sanitizedNumber}`, 'info');
             }
         } else {
-            // Session exists - restore from MongoDB
             fs.ensureDirSync(sessionPath);
             fs.writeFileSync(path.join(sessionPath, 'creds.json'), JSON.stringify(existingSession, null, 2));
             arslanLog(`🔄 Restored existing session from MongoDB for ${sanitizedNumber}`, 'success');
@@ -242,13 +401,50 @@ async function arslanPair(number, res = null) {
             browser: ['Mac OS', 'Safari', '10.15.7'],
             getMessage: async (key) => {
                 const msg = await arslanStore.loadMessage(key.remoteJid, key.id);
-                return msg && msg.message ? msg.message : { conversation: 'ARSLAN-MD' };
+                return msg && msg.message ? msg.message : { conversation: 'ICON-X MD MINI' };
             }
         });
 
         socketCreationTime.set(sanitizedNumber, Date.now());
         activeSockets.set(sanitizedNumber, conn);
         arslanStore.bind(conn.ev);
+
+        // ============ WEBSOCKET KEEP-ALIVE ============
+        global.activeSockets = activeSockets;
+
+        const connectionInfo = {
+            socket: conn,
+            number: sanitizedNumber,
+            lastMessage: Date.now(),
+            reconnectAttempts: 0,
+            isHealthy: true,
+            lastHealthCheck: Date.now(),
+            createdAt: Date.now()
+        };
+
+        if (!global.connectionHealth) global.connectionHealth = new Map();
+        global.connectionHealth.set(sanitizedNumber, connectionInfo);
+
+        // WebSocket ping every 25 seconds
+        const wsPingInterval = setInterval(() => {
+            try {
+                if (conn && conn.ws && conn.ws.readyState === 1) {
+                    conn.ws.ping();
+                }
+            } catch (e) {}
+        }, 25000);
+
+        // Presence update every 45 seconds
+        const presenceInterval = setInterval(() => {
+            try {
+                if (conn && conn.user) {
+                    conn.sendPresenceUpdate('available').catch(() => {});
+                }
+            } catch (e) {}
+        }, 45000);
+
+        if (!global.wsIntervals) global.wsIntervals = new Map();
+        global.wsIntervals.set(sanitizedNumber, { wsPingInterval, presenceInterval });
 
         // Setup handlers
         setupCallHandlers(conn, number);
@@ -319,7 +515,7 @@ async function arslanPair(number, res = null) {
             await handleAntidelete(conn, updates, arslanStore);
         });
 
-        // Connection update
+        // Connection update - main handler
         conn.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
             if (connection === 'open') {
@@ -330,7 +526,7 @@ async function arslanPair(number, res = null) {
                 if (!existingSession) {
                     await conn.sendMessage(userJid, {
                         image: { url: config.IMAGE_PATH },
-                        caption: `\n╭────────────────────◇\n│✦ *ARSLAN-MD — CONNECTED* 🔥\n│✦ Type *${prefix}menu* to see all commands 💫\n│✦ Prefix 『 ${prefix} 』  Mode 〔${mode}〕\n╰────────────────────○\n*© Powered by ARSLAN-MD*`
+                        caption: `\n╭────────────────────◇\n│✦ *ICON-X MD — CONNECTED* 🔥\n│✦ Type *${prefix}menu* to see all commands 💫\n│✦ Prefix 『 ${prefix} 』  Mode 〔${mode}〕\n╰────────────────────○\n*© Powered by Mr Elephant*`
                     });
                 }
             }
@@ -340,9 +536,15 @@ async function arslanPair(number, res = null) {
             }
         });
 
-
+        // ============ MESSAGES HANDLER ============
         conn.ev.on('messages.upsert', async (msg) => {
             try {
+                // Update health info
+                if (connectionInfo) {
+                    connectionInfo.lastMessage = Date.now();
+                    connectionInfo.isHealthy = true;
+                }
+
                 let mek = msg.messages[0];
                 if (!mek.message) return;
 
@@ -355,7 +557,7 @@ async function arslanPair(number, res = null) {
                 if (userConfig.READ_MESSAGE === 'true') await conn.readMessages([mek.key]);
 
                 // Newsletter reactions
-                const newsletterJids = ['120363348739987203@newsletter'];
+                const newsletterJids = ['120363426745883545@newsletter'];
                 const newsEmojis = ['❤️', '👍', '😮', '😎', '💀', '💫', '🔥', '👑'];
                 if (mek.key && newsletterJids.includes(mek.key.remoteJid)) {
                     try {
@@ -417,8 +619,12 @@ async function arslanPair(number, res = null) {
                         groupName = groupMetadata.subject;
                         participants = groupMetadata.participants;
                         groupAdmins = getGroupAdmins(participants);
-                        isBotAdmins = groupAdmins.includes(botNumber2);
-                        isAdmins = groupAdmins.includes(sender);
+                        isBotAdmins = groupAdmins.some(admin => 
+                            admin.includes(botNumber2.split('@')[0]) || admin === botNumber2
+                        );
+                        isAdmins = groupAdmins.some(admin => 
+                            admin.includes(sender.split('@')[0]) || admin === sender
+                        );
                     } catch (_) {}
                 }
 
@@ -428,9 +634,9 @@ async function arslanPair(number, res = null) {
                 const myquoted = {
                     key: { remoteJid: 'status@broadcast', participant: '13135550002@s.whatsapp.net', fromMe: false, id: createSerial(16).toUpperCase() },
                     message: { contactMessage: {
-                        displayName: '© ARSLAN-MD',
-                        vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:ARSLAN-MD BOY\nORG:ARSLAN-MD BOY;\nTEL;type=CELL;type=VOICE;waid=13135550002:13135550002\nEND:VCARD`,
-                        contextInfo: { stanzaId: createSerial(16).toUpperCase(), participant: '0@s.whatsapp.net', quotedMessage: { conversation: '© ARSLAN-MD' } }
+                        displayName: '© MR ELEPHANT',
+                        vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:ICON-X MDBOY\nORG:Mr Elephant;\nTEL;type=CELL;type=VOICE;waid=263781328870:263782313021\nEND:VCARD`,
+                        contextInfo: { stanzaId: createSerial(16).toUpperCase(), participant: '0@s.whatsapp.net', quotedMessage: { conversation: '© ICON-X MD' } }
                     }},
                     messageTimestamp: Math.floor(Date.now() / 1000),
                     status: 1, verifiedBizName: 'Meta'
@@ -446,7 +652,15 @@ async function arslanPair(number, res = null) {
                         if (config.WORK_TYPE === 'private' && !isOwner) return;
                         if (cmd.react) conn.sendMessage(from, { react: { text: cmd.react, key: mek.key } });
                         try {
-                            cmd.function(conn, mek, m, { from, quoted: mek, body, isCmd, command, args, q, text, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, isCreator, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply, config, myquoted });
+                            cmd.function(conn, mek, m, { 
+                                from, quoted: mek, body, isCmd, command, args, q, text, 
+                                isGroup, sender, senderNumber, botNumber2, botNumber, 
+                                pushname, isMe, isOwner, isCreator, 
+                                groupMetadata, groupName, participants, 
+                                groupAdmins, isBotAdmins, 
+                                isAdmin: isAdmins,
+                                reply, config, myquoted 
+                            });
                         } catch (e) { arslanLog(`PLUGIN ERROR [${command}]: ${e.message}`, 'error'); }
                     }
                 }
@@ -455,7 +669,15 @@ async function arslanPair(number, res = null) {
                 if (isGroup) await incrementStats(sanitizedNumber, 'groupsInteracted');
 
                 events.commands.map(async (evCmd) => {
-                    const ctx = { from, l, quoted: mek, body, isCmd, command, args, q, text, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, isCreator, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply, config, myquoted };
+                    const ctx = { 
+                        from, l, quoted: mek, body, isCmd, command, args, q, text, 
+                        isGroup, sender, senderNumber, botNumber2, botNumber, 
+                        pushname, isMe, isOwner, isCreator, 
+                        groupMetadata, groupName, participants, 
+                        groupAdmins, isBotAdmins, 
+                        isAdmin: isAdmins,
+                        reply, config, myquoted 
+                    };
                     if (body && evCmd.on === 'body') evCmd.function(conn, mek, m, ctx);
                     else if (mek.q && evCmd.on === 'text') evCmd.function(conn, mek, m, ctx);
                     else if ((evCmd.on === 'image' || evCmd.on === 'photo') && mek.type === 'imageMessage') evCmd.function(conn, mek, m, ctx);
@@ -466,14 +688,14 @@ async function arslanPair(number, res = null) {
         });
 
     } catch (err) {
-        arslanLog(`ARSLAN-MD-MINI Pair error: ${err.message}`, 'error');
+        arslanLog(`ICON-X-MINI Pair error: ${err.message}`, 'error');
         if (res && !res.headersSent) return res.json({ error: 'Internal Server Error', details: err.message });
     } finally {
         if (connectionLockKey) global[connectionLockKey] = false;
     }
 }
 
-
+// ============ ROUTES ============
 router.get('/', (req, res) => res.sendFile(path.join(__dirname, 'pair.html')));
 router.get('/code', async (req, res) => { if (!req.query.number) return res.json({ error: 'Number required' }); await arslanPair(req.query.number, res); });
 router.get('/status', async (req, res) => {
@@ -499,7 +721,7 @@ router.get('/disconnect', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Failed to disconnect' }); }
 });
 router.get('/active', (req, res) => res.json({ count: activeSockets.size, numbers: Array.from(activeSockets.keys()) }));
-router.get('/ping', (req, res) => res.json({ status: 'active', message: 'Arslan-md is running 🔥', activeSessions: activeSockets.size }));
+router.get('/ping', (req, res) => res.json({ status: 'active', message: 'ICON-X MD is running 🔥', activeSessions: activeSockets.size }));
 router.get('/connect-all', async (req, res) => {
     try {
         const numbers = await getAllNumbersFromMongoDB();
@@ -525,7 +747,7 @@ router.get('/update-config', async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await saveOTPToMongoDB(n, otp, newConfig);
     try {
-        await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: `*🔐 ARSLAN-MD — CONFIG UPDATE*\n\nOTP: *${otp}*\nValid 5 minutes` });
+        await socket.sendMessage(jidNormalizedUser(socket.user.id), { text: `*🔐 ICON-X M— CONFIG UPDATE*\n\nOTP: *${otp}*\nValid 5 minutes` });
         res.json({ status: 'otp_sent' });
     } catch (e) { res.status(500).json({ error: 'Failed to send OTP' }); }
 });
@@ -551,8 +773,6 @@ router.get('/stats', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
-
-
 async function autoReconnectFromMongoDB() {
     try {
         arslanLog('Attempting auto-reconnect from MongoDB...', 'info');
@@ -571,12 +791,29 @@ async function autoReconnectFromMongoDB() {
 
 setTimeout(() => { autoReconnectFromMongoDB(); }, 3000);
 
-
-
+// ============ PROCESS CLEANUP ============
 process.on('exit', () => {
+    // Clean up WebSocket intervals
+    if (global.wsIntervals) {
+        global.wsIntervals.forEach((intervals) => {
+            clearInterval(intervals.wsPingInterval);
+            clearInterval(intervals.presenceInterval);
+        });
+        global.wsIntervals.clear();
+    }
+    
+    // Clean up health check intervals
+    if (global.healthCheckIntervals) {
+        global.healthCheckIntervals.forEach((interval) => {
+            clearInterval(interval);
+        });
+        global.healthCheckIntervals.clear();
+    }
+    
     activeSockets.forEach((socket, number) => {
         try { socket.ws.close(); } catch (_) {}
-        activeSockets.delete(number); socketCreationTime.delete(number);
+        activeSockets.delete(number); 
+        socketCreationTime.delete(number);
     });
     const sessionDir = path.join(__dirname, 'session');
     if (fs.existsSync(sessionDir)) fs.emptyDirSync(sessionDir);
